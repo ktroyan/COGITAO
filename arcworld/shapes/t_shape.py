@@ -1,7 +1,7 @@
 import numpy as np
 
-from arcworld.shapes import StraightLine
-from arcworld.shapes.base import BasicShape
+from .base import BasicShape
+from .straight_line import StraightLine
 
 
 class TShape(BasicShape):

@@ -6,8 +6,8 @@ import scipy
 import skimage
 from scipy.ndimage import generate_binary_structure
 
-from arcworld.shapes.base import Shape
-from arcworld.shapes.utils import grid_to_pc, pc_from_indexes_and_colors, grid_to_cropped_grid
+from .base import Shape
+from .utils import grid_to_pc, pc_from_indexes_and_colors, grid_to_cropped_grid
 
 
 class RandomShape(Shape):

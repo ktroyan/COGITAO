@@ -1,7 +1,8 @@
 
-from arcworld.point_cloud.point_cloud import PointCloud
-from arcworld.point_cloud.utils import pc_to_shape_only_grid
 import numpy as np
+
+from ..point_cloud.point_cloud import PointCloud
+from ..point_cloud.utils import pc_to_shape_only_grid
 
 
 def add_contour_to_shape(shape, contour_dict = {"up": 0, "down": 0, "left": 0, "right": 0}):

@@ -1,6 +1,6 @@
 import numpy as np
 
-from arcworld.shapes.base import BasicShape
+from .base import BasicShape
 
 
 class StraightLine(BasicShape):

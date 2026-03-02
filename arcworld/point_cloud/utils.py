@@ -1,6 +1,6 @@
 import numpy as np
 
-from arcworld.constants import ShapeOutOfBounds, MAX_GRID_SIZE
+from ..constants import ShapeOutOfBounds, MAX_GRID_SIZE
 
 def pc_to_full_sized_grid(pc, n_cols=MAX_GRID_SIZE, n_rows=MAX_GRID_SIZE) -> np.ndarray:
     '''

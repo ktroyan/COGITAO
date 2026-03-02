@@ -1,8 +1,9 @@
 import collections.abc
 from collections import UserDict
 import numpy as np
-from arcworld.constants import MAX_GRID_SIZE, ALLOWED_COLORS
-from arcworld.point_cloud.utils import pc_to_full_sized_grid, pc_to_shape_only_grid
+
+from ..constants import MAX_GRID_SIZE, ALLOWED_COLORS
+from .utils import pc_to_full_sized_grid, pc_to_shape_only_grid
 
 ## For this generator, which is shape-centric (object-centric), we define the "PointCloud" class below as a dedicate class with its own 
 ## method and attributes to facilitate shape manipulation (e.g. moving a shape within a grid). 

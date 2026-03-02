@@ -1,7 +1,10 @@
 .vscode
 **/__pycache__/
 *.h5
-arcworld/datasets/shapes.h5
+shapes.h5
 paper_plots/*
 .env
-arcworld/datasets/million_positionned_objects.zip
+arcworld/datasets/million_positionned_objects.zipbefore_arc_datasets
+
+outputs
+checkpoints

@@ -1,47 +1,69 @@
 import os
+import zipfile
+
 import h5py
 
-current_path = os.getcwd()
+current_path = os.path.dirname(__file__)
 
-SHAPE_DATASET_PATH = os.path.join(current_path, 'arcworld', 'datasets', 'shapes.h5')
+SHAPE_DATASET_PATH = os.path.join(current_path, "datasets", "shapes.h5")
+SHAPE_DATASET_ZIP_PATH = os.path.join(current_path, "datasets", "shapes.zip")
+
+
+def extract_h5():
+    if os.path.exists(SHAPE_DATASET_PATH):
+        return
+    if not os.path.exists(SHAPE_DATASET_ZIP_PATH):
+        raise FileNotFoundError(
+            f"Neither {SHAPE_DATASET_PATH} nor {SHAPE_DATASET_ZIP_PATH} exists."
+        )
+    with zipfile.ZipFile(SHAPE_DATASET_ZIP_PATH, "r") as zip_ref:
+        zip_ref.extractall(os.path.dirname(SHAPE_DATASET_PATH))
+
+
+# Run extraction on import to ensure the dataset is available
+extract_h5()
+
 
 def load_h5(f, filename):
     return f[filename][()]
 
+
 def load_shape(idx, f=None):
     if not f:
         with h5py.File(SHAPE_DATASET_PATH) as f:
-            return load_h5(f, f'shapes/{idx}')
-    return load_h5(f, f'shapes/{idx}')
+            return load_h5(f, f"shapes/{idx}")
+    return load_h5(f, f"shapes/{idx}")
 
-def save_h5(data, filename, f, dtype='i8'):
+
+def save_h5(data, filename, f, dtype="i8"):
     try:
         del f[filename]
     except KeyError:
         pass
     f.create_dataset(filename, data=data, dtype=dtype)
 
-def save_shape(data, idx, f = None):
+
+def save_shape(data, idx, f=None):
     if not f:
-        with h5py.File(SHAPE_DATASET_PATH, 'a') as f:
-            save_h5(data, f'shapes/{idx}', f)
+        with h5py.File(SHAPE_DATASET_PATH, "a") as f:
+            save_h5(data, f"shapes/{idx}", f)
             return
-    save_h5(data, f'shapes/{idx}', f)
+    save_h5(data, f"shapes/{idx}", f)
+
 
 def save_conditions(data, colnames):
-    with h5py.File(SHAPE_DATASET_PATH, 'a') as f:
-        save_h5(colnames, 'condition_names', f, dtype=None)
-        save_h5(data, 'conditions', f)
+    with h5py.File(SHAPE_DATASET_PATH, "a") as f:
+        save_h5(colnames, "condition_names", f, dtype=None)
+        save_h5(data, "conditions", f)
+
 
 def load_conditions():
     with h5py.File(SHAPE_DATASET_PATH) as f:
-        names = [str(x, 'utf-8') for x in load_h5(f, 'condition_names')]
-        return load_h5(f, 'conditions'), names
+        names = [str(x, "utf-8") for x in load_h5(f, "condition_names")]
+        return load_h5(f, "conditions"), names
+
 
 def get_nr_of_shapes():
     with h5py.File(SHAPE_DATASET_PATH) as f:
-        num_shapes = len(f['shapes'].keys())
+        num_shapes = len(f["shapes"].keys())
     return num_shapes
-
-
-

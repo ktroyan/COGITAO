@@ -1,8 +1,8 @@
 from abc import abstractmethod
 from functools import cached_property
 
-from arcworld.point_cloud.point_cloud import PointCloud
-from arcworld.shapes.utils import move_to_position, delete_out_of_bounds_points, grid_to_pc
+from ..point_cloud.point_cloud import PointCloud
+from .utils import move_to_position, delete_out_of_bounds_points, grid_to_pc
 
 
 class Shape():

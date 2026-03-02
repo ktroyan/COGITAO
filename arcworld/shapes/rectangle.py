@@ -1,5 +1,7 @@
 import numpy as np
-from arcworld.shapes.base import BasicShape
+
+from .base import BasicShape
+
 class Rectangle(BasicShape):
 
     def __init__(self,

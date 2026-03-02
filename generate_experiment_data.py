@@ -6,8 +6,9 @@ import copy
 import json
 import pandas
 import time
-from utils.db_utils import access_db, close_db, store_task_in_db, hash_task
-from generator import generator
+
+from arcworld.utils.db_utils import access_db, close_db, store_task_in_db, hash_task
+from arcworld.generator import Generator
 from experiment_configs.c0 import compositionality_configs as c0_configs
 from experiment_configs.compositionality import compositionality_configs 
 from experiment_configs.generalization import generalization_configs
@@ -52,7 +53,7 @@ def generate_equal_balance_from_transforms(config, n_tasks_to_generate):
         for transform in list_of_transforms:
             count_per_transform = 0
             editable_config["allowed_combinations"] = [transform]
-            gen = generator(editable_config)
+            gen = Generator(editable_config)
             
             while count_per_transform < n_per_transform and len(task_list) < n_tasks_to_generate:
                 try: 

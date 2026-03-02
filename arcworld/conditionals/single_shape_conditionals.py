@@ -1,6 +1,7 @@
 import numpy as np
 import scipy
-from arcworld.shapes.base import Shape 
+
+from ..shapes.base import Shape 
 
 
 ####################################################### CONDITIONALS TO ADD #########################################################
