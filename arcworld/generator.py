@@ -328,8 +328,7 @@ class Generator:
 
     def generate_single_task(self):
         task = {"pairs": [], "transform_suite": None}
-        n_config_trials = 0
-        while n_config_trials < self.max_trials_for_configuration:
+        for _ in range(self.max_trials_for_configuration):
             transform_suite = self.sample_transform_suite()
 
             # Probably some edits needed here --> not a practical way of operating
@@ -343,10 +342,11 @@ class Generator:
 
             failed_transform_trials = 0
             generated_pairs = []
-            while (
-                failed_transform_trials < self.max_trials_for_function_combination
-                and len(generated_pairs) < self.config.n_examples
-            ):
+            for _ in range(self.config.n_examples):
+                if (
+                    failed_transform_trials >= self.max_trials_for_function_combination
+                ):
+                    break
                 try:
                     input_grid, shapes_positionned = self.set_up_initial_grid(
                         compatible_shape_rows=compatible_shape_rows
@@ -380,7 +380,7 @@ class Generator:
                     "transformation_suite": transform_suite,
                 }
             elif failed_transform_trials >= self.max_trials_for_function_combination:
-                n_config_trials += 1
+                continue
             else:
                 print("Something went wrong with the generation of the task.")
 
