@@ -1,8 +1,9 @@
 from typing import List, Optional
-from pydantic import BaseModel, Field, model_validator, field_validator
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-class ConfigValidator(BaseModel):
+class DatasetConfig(BaseModel):
     min_n_shapes_per_grid: int = Field(..., ge=1)
     max_n_shapes_per_grid: int = Field(..., ge=1)
 

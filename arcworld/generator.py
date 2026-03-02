@@ -1,30 +1,33 @@
-import numpy as np
 import random
+
 import h5py
+import numpy as np
 import pandas as pd
 
 from . import hdf5_utils
-from .shapes.base import Shape
+from .conditionals.single_shape_conditionals import (
+    conditionals_dict as single_shape_conditionals_dict,
+)
+from .config import DatasetConfig
 from .general_utils import (
     position_shape_in_world,
     randomly_add_shape_to_world,
 )
-from .conditionals.single_shape_conditionals import (
-    conditionals_dict as single_shape_conditionals_dict,
-)
+from .shapes.base import Shape
 from .transformations.shape_transformations import (
-    transformations_dict,
     transformations_constraints,
+    transformations_dict,
 )
-from .utils.config_validation import ConfigValidator
 
 
 class Generator:
-    def __init__(self, config: dict | ConfigValidator, debug_mode=False):
-        if isinstance(config, ConfigValidator):
+    def __init__(self, config: dict | DatasetConfig, debug_mode=False):
+        if isinstance(config, DatasetConfig):
             self.config = config
+        elif isinstance(config, dict):
+            self.config = DatasetConfig.model_validate(config)
         else:
-            self.config = ConfigValidator(**config)
+            raise ValueError("config must be a dict or a DatasetConfig instance")
         self.transformations_dict = transformations_dict  ## Loads transformations_dict into the class (from the ...transformation.py files)
         self.transformations_constraints = transformations_constraints
 
@@ -343,9 +346,7 @@ class Generator:
             failed_transform_trials = 0
             generated_pairs = []
             for _ in range(self.config.n_examples):
-                if (
-                    failed_transform_trials >= self.max_trials_for_function_combination
-                ):
+                if failed_transform_trials >= self.max_trials_for_function_combination:
                     break
                 try:
                     input_grid, shapes_positionned = self.set_up_initial_grid(
