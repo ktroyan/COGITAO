@@ -82,9 +82,9 @@ if __name__ == "__main__":
     configs_to_loop = [compositionality_configs]
     # configs_to_loop = [compositionality_gridsize_config]
 
-    n_train = 100
-    n_test = 100
-    n_val = 100
+    n_train = 1000000
+    n_test = 1000
+    n_val = 1000
     
     # df will be used to store how long each config took
     time_dict = {}
@@ -93,8 +93,7 @@ if __name__ == "__main__":
         for config in tqdm(study):
             start_time = time.time()
             print("working on config with path:",config["saving_path"])
-            if "experiment_1" in config["saving_path"]:
-
+            if "experiment_1" in config["saving_path"] and "exp_setting_1" in config["saving_path"]:
                 if "train" in config["saving_path"]:
                     generate_equal_balance_from_transforms(config, n_train)
                     
@@ -122,7 +121,7 @@ if __name__ == "__main__":
                     
                 else:
                     print(f"Saving path {config['saving_path']} not recognized.")
-                
+            
             end = time.time()
             print(f"Time taken: {end - start_time} seconds")
             time_dict[config["saving_path"]] = end - start_time

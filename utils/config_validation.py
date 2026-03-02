@@ -47,7 +47,7 @@ class ConfigValidator(BaseModel):
 
         # Check that exactly one of allowed_transformations or allowed_combinations is provided
         if (allowed_trans is None and allowed_combs is None) or (allowed_trans is not None and allowed_combs is not None):
-            raise ValueError("Exactly one of allowed_combinations or allowed_transformations must be provided (not both or neither).")
+            raise ValueError("Only one of allowed_combinations or allowed_transformations should be provided (not both nor neither).")
 
         min_depth = values.min_transformation_depth
         max_depth = values.max_transformation_depth

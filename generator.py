@@ -252,13 +252,6 @@ class generator():
         output_grid = full_grid_sequence[-1] if full_grid_sequence[-1] is not None else None
         return output_grid, full_grid_sequence
 
-    
-
-
-    
-    
-
-
 
     def generate_single_task(self):
         task = {"pairs": [],

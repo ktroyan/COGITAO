@@ -1,0 +1,8 @@
+,anthropic/claude-sonnet-4.5,tngtech/deepseek-r1t2-chimera:free,openai/gpt-4.1-mini,openai/o3,x-ai/grok-code-fast-1,google/gemini-3-pro-preview
+ID1,5 / 50,2 / 50,0 / 50,9 / 50,1 / 49,25 / 50
+ID2,5 / 49,10 / 50,5 / 50,18 / 50,11 / 50,35 / 50
+OOD1,0 / 50,0 / 50,0 / 50,4 / 50,0 / 47,14 / 50
+OOD2,0 / 50,0 / 50,0 / 50,0 / 50,0 / 48,11 / 50
+OOD3,0 / 3,1 / 50,0 / 49,6 / 50,2 / 50,24 / 50
+envGen_size,0 / 0,10 / 50,0 / 49,19 / 50,6 / 50,34 / 50
+envGen_objects,0 / 0,8 / 50,1 / 50,13 / 50,7 / 48,33 / 50

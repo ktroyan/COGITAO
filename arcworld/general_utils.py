@@ -67,7 +67,6 @@ def plot_task(task, size = (18,8)):
     '''Plot full task (input and output examples) with appropriate title'''
     fig, axs = plt.subplots(2, len(task["pairs"]), figsize=size)
 
-        
     if len(task['pairs']) == 1:
         for i in range(len(task['pairs'])):     
             axs[0].imshow(task['pairs'][i]['input'], cmap=COLORMAP, norm=NORM)
@@ -82,7 +81,7 @@ def plot_task(task, size = (18,8)):
             axs[1].grid(True,which='both',color='lightgrey', linewidth=0.5)
             axs[1].set_yticks([x-0.5 for x in range(1+task['pairs'][i]['output'].shape[0])])
             axs[1].set_xticks([x-0.5 for x in range(1+task['pairs'][i]['output'].shape[1])])   
-            axs[1].set_xticklabels([])
+            axs[1].set_xticklabels([    ])
             axs[1].set_yticklabels([])
             axs[1].set_title('Output ' + str(i+1))
     

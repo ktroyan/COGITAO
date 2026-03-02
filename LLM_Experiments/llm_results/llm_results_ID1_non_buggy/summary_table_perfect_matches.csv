@@ -1,0 +1,8 @@
+,tngtech/deepseek-r1t2-chimera:free,openai/gpt-4.1-mini,openai/o3,x-ai/grok-code-fast-1,google/gemini-3-pro-preview
+ID1,8 / 50,1 / 50,19 / 50,7 / 48,39 / 50
+ID2,0 / 0,0 / 0,0 / 0,0 / 0,0 / 0
+OOD1,0 / 0,0 / 0,0 / 0,0 / 0,0 / 0
+OOD2,0 / 0,0 / 0,0 / 0,0 / 0,0 / 0
+OOD3,0 / 0,0 / 0,0 / 0,0 / 0,0 / 0
+envGen_size,0 / 0,0 / 0,0 / 0,0 / 0,0 / 0
+envGen_objects,0 / 0,0 / 0,0 / 0,0 / 0,0 / 0

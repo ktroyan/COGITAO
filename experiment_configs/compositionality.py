@@ -1,7 +1,7 @@
 import copy
 
 # Default parameters common to all experiments
-cp_path = "before_arc_datasets/compositionality"
+cp_path = "million_dataset/"
 
 cp_base_config = {
     "min_n_shapes_per_grid": 2,
@@ -40,12 +40,11 @@ compositionality_configs.append(make_config(
      ["mirror_horizontal", "mirror_horizontal"],
      ["translate_up", "mirror_horizontal"],
      ["rot90", "mirror_horizontal"], 
-     ["rot90", "translate_up"],
      ["mirror_horizontal", "rot90"]],
     1, 1, "train"))
 
 compositionality_configs.append(make_config(
-    [["translate_up", "rot90"]],
+    [["translate_up", "rot90"], ["rot90", "translate_up"]],
     1, 1, "test"))
 
 # Exp 2
@@ -62,7 +61,7 @@ compositionality_configs.append(make_config(
     1, 2, "train"))
 
 compositionality_configs.append(make_config(
-    [["pad_right", "change_shape_color"]],
+    [["pad_right", "change_shape_color"], ["change_shape_color", "pad_right"]],
     1, 2, "test"))
 
 # Exp 3 
@@ -78,7 +77,7 @@ compositionality_configs.append(make_config(
     1, 3, "train"))
 
 compositionality_configs.append(make_config(
-    [["rot90", "crop_bottom_side"]],
+    [["rot90", "crop_bottom_side"], ["crop_bottom_side", "rot90"]],
     1, 3, "test"))
 
 # Exp 4
@@ -94,7 +93,7 @@ compositionality_configs.append(make_config(
     1, 4, "train"))
 
 compositionality_configs.append(make_config(
-    [["double_right", "crop_contours"]],
+    [["double_right", "crop_contours"], ["crop_contours", "double_right"]],
     1, 4, "test"))
 
 # Exp 5
@@ -110,7 +109,7 @@ compositionality_configs.append(make_config(
     1, 5, "train"))
 
 compositionality_configs.append(make_config(
-    [["pad_left", "extend_contours_same_color"]],
+    [["pad_left", "extend_contours_same_color"], ["extend_contours_same_color", "pad_left"]],
     1, 5, "test"))
 
 # === Setting 2 ===
@@ -127,7 +126,7 @@ compositionality_configs.append(make_config(
     2, 1, "train"))
 
 compositionality_configs.append(make_config(
-    [["translate_up", "rot90"]],
+    [["translate_up", "rot90"], ["rot90", "translate_up"]],
     2, 1, "test"))
 
 ## Exp 2
@@ -143,7 +142,7 @@ compositionality_configs.append(make_config(
     2, 2, "train"))
 
 compositionality_configs.append(make_config(
-    [["pad_right", "change_shape_color"]],
+    [["pad_right", "change_shape_color"], ["change_shape_color", "pad_right"]],
     2, 2, "test"))
 
 ## Exp 3
@@ -158,7 +157,7 @@ compositionality_configs.append(make_config(
     2, 3, "train"))
 
 compositionality_configs.append(make_config(
-    [["rot90", "crop_bottom_side"]],
+    [["rot90", "crop_bottom_side"], ["crop_bottom_side", "rot90"]],
     2, 3, "test"))
 
 # Exp 4
@@ -173,7 +172,7 @@ compositionality_configs.append(make_config(
     2, 4, "train"))
 
 compositionality_configs.append(make_config(
-    [["double_right", "crop_contours"]],
+    [["double_right", "crop_contours"], ["crop_contours", "double_right"]],
     2, 4, "test"))
 
 
@@ -189,7 +188,7 @@ compositionality_configs.append(make_config(
     2, 5, "train"))
 
 compositionality_configs.append(make_config(
-    [["pad_left", "extend_contours_same_color"]],
+    [["pad_left", "extend_contours_same_color"], ["extend_contours_same_color", "pad_left"]],
     2, 5, "test"))
 
 # === Setting 3 ===

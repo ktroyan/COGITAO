@@ -3,3 +3,5 @@
 *.h5
 arcworld/datasets/shapes.h5
 paper_plots/*
+.env
+arcworld/datasets/million_positionned_objects.zip

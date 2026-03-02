@@ -1,7 +1,7 @@
 import copy
 
 # Default parameters common to all experiments
-cp_path = "before_arc_datasets/compositionality"
+cp_path = "c0_million"
 
 cp_base_config = {
     "min_n_shapes_per_grid": 2,
@@ -47,7 +47,6 @@ double_ops = [
     ["translate_up", "translate_up"],
     ["translate_up", "translate_down"],
     ["translate_up", "translate_left"],
-    ["translate_up", "translate_right"],
 
     ["translate_down", "translate_up"],
     ["translate_down", "translate_down"],
@@ -59,46 +58,44 @@ double_ops = [
     ["translate_left", "translate_left"],
     ["translate_left", "translate_right"],
 
-    ["translate_right", "translate_up"],
     ["translate_right", "translate_down"],
     ["translate_right", "translate_left"],
     ["translate_right", "translate_right"],
 ]
 
-
 # All ordered triples
 triple_ops = [[a[0], b[0], c[0]] for a in single_ops for b in single_ops for c in single_ops]
 
 # Pick exactly ONE pair to hold out for test:
-held_out = ["translate_up", "translate_right"]
+held_out = [["translate_up", "translate_right"], ["translate_right", "translate_up"]]
 
 # TRAIN = all combinations except held-out
-c10_train_ops = single_ops + [op for op in double_ops if op != held_out]
-c20_train_ops = [op for op in double_ops if op != held_out]
-c30_train_ops = [op for op in double_ops]
+c10_train_ops = single_ops + [op for op in double_ops]
+c20_train_ops = [op for op in double_ops]
+c30_train_ops = single_ops + [op for op in double_ops] + held_out
 
 
-# compositionality_configs.append(make_config(
-#     c10_train_ops,
-#     1, 0, "train"
-# ))
+compositionality_configs.append(make_config(
+    c10_train_ops,
+    1, 0, "train"
+))
+
+# TEST = only the held-out combination
+compositionality_configs.append(make_config(
+    held_out,
+    1, 0, "test"
+))
+
+compositionality_configs.append(make_config(
+    c20_train_ops,
+    2, 0, "train"
+))
 
 # # TEST = only the held-out combination
-# compositionality_configs.append(make_config(
-#     [held_out],
-#     1, 0, "test"
-# ))
-
-# compositionality_configs.append(make_config(
-#     c20_train_ops,
-#     2, 0, "train"
-# ))
-
-# # TEST = only the held-out combination
-# compositionality_configs.append(make_config(
-#     [held_out],
-#     2, 0, "test"
-# ))
+compositionality_configs.append(make_config(
+    held_out,
+    2, 0, "test"
+))
 
 compositionality_configs.append(make_config(
     c30_train_ops,
