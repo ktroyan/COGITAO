@@ -120,6 +120,11 @@ def plot_dataset_examples(
         pass
     else:
         raise TypeError("dataset must be a string, Path, or CogitaoDataset instance")
+
+    if dataset.cfg.env_format == "grid":
+        print("Grid format not supported for color analysis.")
+        return
+
     print(f"Dataset '{dataset.path}' has {len(dataset)} items.")
     dataloader = DataLoader(dataset, num_workers=4, shuffle=shuffle)
 
