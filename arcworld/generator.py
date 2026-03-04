@@ -119,15 +119,13 @@ class Generator:
             for col in conditionals_not_to_satisfy_indices
         ]
 
-        if conditions_ones:
-            combined_conditions = conditions_ones[0]
-            for condition in conditions_ones[1:]:
-                combined_conditions &= condition
+        # Default: all rows pass (no constraints)
+        combined_conditions = pd.Series(
+            True, index=self.shape_conditionals_table_df.index
+        )
 
-        # For the zeros, start with the first condition and chain with &
-        if conditions_zeros:
-            for condition in conditions_zeros:
-                combined_conditions &= condition
+        for condition in [*conditions_ones, *conditions_zeros]:
+            combined_conditions &= condition
 
         # Filter the DataFrame based on the combined conditions
         return self.shape_conditionals_table_df[combined_conditions].index.tolist()
@@ -279,7 +277,9 @@ class Generator:
                 output_grid = position_shape_in_world(output_grid, transformed_shape)
             else:
                 output_grid = None  # If the shape is null, we invalidate the whole grid
-            full_grid_sequence.append(output_grid.copy())
+            full_grid_sequence.append(
+                output_grid.copy() if output_grid is not None else None
+            )
         return output_grid, full_grid_sequence
 
     def apply_transform_suite_to_grid_2(
@@ -323,14 +323,10 @@ class Generator:
                 temp_grid.copy() if temp_grid is not None else None
             )
 
-        # Final output grid is the last valid temp_grid
-        output_grid = (
-            full_grid_sequence[-1] if full_grid_sequence[-1] is not None else None
-        )
+        output_grid = full_grid_sequence[-1]
         return output_grid, full_grid_sequence
 
     def generate_single_task(self):
-        task = {"pairs": [], "transform_suite": None}
         for _ in range(self.max_trials_for_configuration):
             transform_suite = self.sample_transform_suite()
 
@@ -365,7 +361,7 @@ class Generator:
                         "full_grid_sequence": full_grid_sequence,
                     }
                     generated_pairs.append(to_append)
-                    failed_transform_trials = 0  # If we successfully generate a grid, we reset the failed trials
+                    failed_transform_trials = 0  # Reset on success
                 except Exception as e:
                     if self.debug_mode:
                         print(e)
