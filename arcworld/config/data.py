@@ -2,6 +2,9 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from ..conditionals.single_shape_conditionals import ConditionalType
+from ..transformations.shape_transformations import TransformationType
+
 
 class DatasetConfig(BaseModel):
     min_n_shapes_per_grid: int = Field(..., ge=1)
@@ -12,13 +15,13 @@ class DatasetConfig(BaseModel):
 
     n_examples: int = Field(..., ge=1)
 
-    allowed_transformations: Optional[List[str]] = None
-    allowed_combinations: Optional[List[List[str]]] = None
+    allowed_transformations: Optional[List[TransformationType]] = None
+    allowed_combinations: Optional[List[List[TransformationType]]] = None
 
     min_transformation_depth: Optional[int] = Field(default=None, ge=0)
     max_transformation_depth: Optional[int] = Field(default=None, ge=0)
 
-    shape_compulsory_conditionals: List[str]
+    shape_compulsory_conditionals: List[ConditionalType]
 
     @field_validator("allowed_transformations")
     @classmethod
