@@ -17,13 +17,13 @@ factory-boy = "^3.3.0"
 pydantic = "^2.12.5"
 
 [tool.poetry.group.dev.dependencies]
-isort = "^5.12.0"
-ruff = "^0.0.272"
-black = "^23.3.0"
-mypy = "^1.3.0"
+isort = "*"
+ruff = "*"
+black = "*"
+mypy = "*"
 
 [tool.poetry.group.test.dependencies]
-pytest = "^7.3.2"
+pytest = "*"
 
 [tool.black]
 line-length = 88
