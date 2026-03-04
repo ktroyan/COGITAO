@@ -563,7 +563,7 @@ class CogitaoDataset(Dataset):
         path (str | Path): Path to HDF5 store file
 
     Keyword Args:
-        max_length (int, optional): Maximum number of samples the dataset exposes.
+        max_length (int, optional): Maximum number of samples the dataset exposes. WARNING: Setting it essentially tells dataset to ignore samples beyond that index, which implies that the data distribution can change. Use with caution.
     """
 
     def __init__(self, path: str | Path, *, max_length: int | None = None):
@@ -574,7 +574,7 @@ class CogitaoDataset(Dataset):
             path (str | Path): Path to HDF5 store file
 
         Keyword Args:
-            max_length (int, optional): Maximum number of samples the dataset exposes.
+            max_length (int, optional): Maximum number of samples the dataset exposes. WARNING: Setting it essentially tells dataset to ignore samples beyond that index, which implies that the data distribution can change. Use with caution.
         """
         if torch is None:
             raise ImportError(
