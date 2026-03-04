@@ -177,14 +177,6 @@ def is_shape_filled_rectangle(shape):
     return shape.n_rows != shape.n_cols and is_shape_evenly_colored(shape) == True
 
 
-def is_shape_filled_square(shape):
-    return shape.n_rows == shape.n_cols and is_shape_evenly_colored(shape) == True
-
-
-def is_shape_filled_rectangle(shape):
-    return shape.n_rows != shape.n_cols and is_shape_evenly_colored(shape) == True
-
-
 def is_shape_fully_connected(shape):
     """check if shape is fully connected (i.e. not sparse // with different disconnected bits)"""
     footprint = scipy.ndimage.generate_binary_structure(2, 2)

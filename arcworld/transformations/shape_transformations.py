@@ -673,6 +673,13 @@ TransformationType = Literal[
     "double_left",
     "double_right",
     "quadruple_shape",
+    "crop_contours",
+    "pad_top",
+    "pad_bottom",
+    "pad_left",
+    "pad_right",
+    "pad_shape",
+    "change_shape_color",
 ]
 
 transformations_dict: dict[TransformationType, Callable[[Shape], Shape]] = {
