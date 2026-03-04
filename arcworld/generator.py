@@ -22,13 +22,14 @@ from .utils.img_transform import to_image
 
 
 class Generator:
-    def __init__(self, config: dict | DatasetConfig, debug_mode=False):
-        if isinstance(config, DatasetConfig):
-            self.config = config
-        elif isinstance(config, dict):
+    def __init__(self, config: DatasetConfig, debug_mode=False):
+        if isinstance(config, dict):
+            print(
+                "Warning: passing config as a dict is deprecated and will be removed in future versions. Please pass a DatasetConfig instance instead."
+            )
             self.config = DatasetConfig.model_validate(config)
-        else:
-            raise ValueError("config must be a dict or a DatasetConfig instance")
+
+        self.config = config
         self.transformations_dict = transformations_dict  ## Loads transformations_dict into the class (from the ...transformation.py files)
         self.transformations_constraints = transformations_constraints
 
@@ -354,6 +355,10 @@ class Generator:
                             transform_suite, input_grid, shapes_positionned
                         )
                     )
+                    if output_grid is None:
+                        # A shape went off-grid after transformation — treat as failure
+                        failed_transform_trials += 1
+                        continue
                     to_append = {
                         "input": input_grid,
                         "output": output_grid,

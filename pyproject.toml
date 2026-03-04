@@ -25,6 +25,8 @@ mypy = "*"
 
 [tool.poetry.group.test.dependencies]
 pytest = "*"
+#pytest-cov = "*"
+torch = "*"
 
 [tool.black]
 line-length = 88
@@ -39,3 +41,8 @@ line-length = 88
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]

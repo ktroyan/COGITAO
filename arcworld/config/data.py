@@ -14,6 +14,9 @@ class DatasetConfig(BaseModel):
     max_grid_size: int = Field(..., ge=1)
 
     n_examples: int = Field(..., ge=1)
+    batch_size: int = Field(
+        default=1, ge=1, description="Only relevant for ParallelGenerator."
+    )
 
     allowed_transformations: Optional[List[TransformationType]] = None
     allowed_combinations: Optional[List[List[TransformationType]]] = None
@@ -27,7 +30,7 @@ class DatasetConfig(BaseModel):
 
     image_size: tuple[int, int] | int | None = Field(
         default=None,
-        description="Image size to upscale to. Only works if env_format is set to 'image'. If None, the image size will be the same as the grid size.",
+        description="Image size to upscale to. Is ignored if env_format is set to 'grid'. IS REQUIRED if env_format is set to 'image'.",
     )
     image_upscale_method: Literal["nearest", "bilinear"] = Field(
         default="nearest",
