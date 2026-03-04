@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -23,6 +23,17 @@ class DatasetConfig(BaseModel):
 
     shape_compulsory_conditionals: List[ConditionalType]
 
+    env_format: Literal["grid", "image"] = "grid"
+
+    image_size: tuple[int, int] | int | None = Field(
+        default=None,
+        description="Image size to upscale to. Only works if env_format is set to 'image'. If None, the image size will be the same as the grid size.",
+    )
+    image_upscale_method: Literal["nearest", "bilinear"] = Field(
+        default="nearest",
+        description="Upscaling method for images. Only works if env_format is set to 'image'.",
+    )
+
     @field_validator("allowed_transformations")
     @classmethod
     def validate_allowed_transformations(cls, v):
@@ -36,6 +47,12 @@ class DatasetConfig(BaseModel):
         if v is not None and len(v) == 0:
             return None
         return v
+
+    @model_validator(mode="after")
+    def check_img_env_config(self):
+        if self.env_format == "image" and self.image_size is None:
+            raise ValueError("image_size must be set if env_format is 'image'")
+        return self
 
     @model_validator(mode="after")
     def check_constraints(self):

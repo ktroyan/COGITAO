@@ -18,6 +18,7 @@ from .transformations.shape_transformations import (
     transformations_constraints,
     transformations_dict,
 )
+from .utils.img_transform import to_image
 
 
 class Generator:
@@ -368,14 +369,13 @@ class Generator:
                     failed_transform_trials += 1
 
             if len(generated_pairs) == self.config.n_examples:
-                n_config_trials = (
-                    0  # If we successfully generate a grid, we reset the config trials
-                )
-                return {
+                task = {
                     "pairs": generated_pairs,
-                    "full_grid_sequence": full_grid_sequence,
                     "transformation_suite": transform_suite,
                 }
+                if self.config.env_format == "image":
+                    return self._transform_task_to_image(task)
+                return task
             elif failed_transform_trials >= self.max_trials_for_function_combination:
                 continue
             else:
@@ -387,3 +387,27 @@ class Generator:
             self.config,
         )
         return {}
+
+    def _transform_task_to_image(self, task):
+        """
+        Transform all grids from pairs in a task to images.
+        # TODO: implement this function
+        """
+        to_image_with_cfg = lambda x: to_image(
+            x, self.config.image_size, self.config.image_upscale_method, "CHW"
+        )
+        return {
+            "pairs": [
+                {
+                    "input": to_image_with_cfg(pair["input"]),
+                    "output": to_image_with_cfg(pair["output"]),
+                    "n_shapes": pair["n_shapes"],
+                    "grid_size": pair["grid_size"],
+                    "full_grid_sequence": [
+                        to_image_with_cfg(g) for g in pair["full_grid_sequence"]
+                    ],
+                }
+                for pair in task["pairs"]
+            ],
+            "transformation_suite": task["transformation_suite"],
+        }
