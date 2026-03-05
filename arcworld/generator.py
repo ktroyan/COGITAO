@@ -28,8 +28,9 @@ class Generator:
                 "Warning: passing config as a dict is deprecated and will be removed in future versions. Please pass a DatasetConfig instance instead."
             )
             self.config = DatasetConfig.model_validate(config)
+        else:
+            self.config = config
 
-        self.config = config
         self.transformations_dict = transformations_dict  ## Loads transformations_dict into the class (from the ...transformation.py files)
         self.transformations_constraints = transformations_constraints
 
