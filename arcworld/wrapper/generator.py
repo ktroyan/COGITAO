@@ -41,7 +41,9 @@ def _sample_generation_worker(worker_id, sample_queue, dataset_cfg, shutdown_eve
         try:
             # Generate full task structure (images or grids natively managed by Generator now)
             task_dict = gen.generate_single_task()
-
+            if task_dict is None:
+                failures += 1
+                continue
             sample_queue.put(task_dict, timeout=1)
             failures = 0  # Reset on success
         except QueueFull:
@@ -171,19 +173,6 @@ class ParallelGenerator:
                         continue
                     except KeyboardInterrupt:
                         break
-
-                    # Skip empty / failed tasks
-                    if not sample or "pairs" not in sample:
-                        continue
-
-                    # Drop any task whose pairs contain None inputs or outputs —
-                    # these are produced when a shape goes off-grid after a transform.
-                    if any(
-                        p.get("input") is None or p.get("output") is None
-                        for p in sample["pairs"]
-                    ):
-                        _logger.warning("Dropping task with None input/output pair")
-                        continue
 
                     batch.append(sample)
 

@@ -172,12 +172,20 @@ class Generator:
         elif (
             self.config.allowed_transformations is not None
         ):  ## If allowed transformations are specified, sample from them
-            compatible_transforms = list(self.transformations_dict.keys())
-            compatible_transforms = [
-                t
-                for t in compatible_transforms
-                if t in self.config.allowed_transformations
-            ]
+            compatible_transforms:list[TransformationType] = list(
+                filter(
+                    lambda x: x in self.config.allowed_transformations,
+                    self.transformations_dict.keys(),
+                )
+            )
+
+            if (
+                self.config.min_transformation_depth is None
+                or self.config.max_transformation_depth is None
+            ):
+                raise Exception(
+                    "Please specify both min_transformation_depth and max_transformation_depth in the config when allowed_transformations is specified."
+                )
 
             depth = random.randint(
                 self.config.min_transformation_depth,
@@ -337,7 +345,7 @@ class Generator:
         output_grid = full_grid_sequence[-1]
         return output_grid, full_grid_sequence
 
-    def generate_single_task(self):
+    def generate_single_task(self) -> Optional[Task]:
         for _ in range(self.max_trials_for_configuration):
             transform_suite = self.sample_transform_suite()
 
@@ -396,7 +404,7 @@ class Generator:
               Config is the following:",
             self.config,
         )
-        return {}
+        return None
 
     def _transform_task_to_image(self, task: Task) -> Task:
         """
