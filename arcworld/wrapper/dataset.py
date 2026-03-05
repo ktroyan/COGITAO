@@ -1,13 +1,14 @@
 import json
 import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 
 from ..config import DatasetConfig
+from ..types import CogitaoSample, CogitaoSampleNumpy
 
 
 class HDF5CogitaoStore:
@@ -286,29 +287,29 @@ class HDF5CogitaoStore:
         """Get number of samples currently in store."""
         return self._length
 
-    def __getitem__(self, idx: int) -> Optional[dict]:
+    def __getitem__(self, idx: int) -> CogitaoSampleNumpy:
         """Load a sample from store by index.
 
         Args:
             idx: Sample index
 
         Returns:
-            Dictionary payload or None if not found
+            CogitaoSampleNumpy payload
         """
         return self.load_batch([idx])[0]
 
-    def __getitems__(self, idxs: list[int]) -> list[dict]:
+    def __getitems__(self, idxs: list[int]) -> list[CogitaoSampleNumpy]:
         """Load multiple samples from store by index.
 
         Args:
             idxs: List of sample indices
 
         Returns:
-            List of dictionary payloads
+            List of CogitaoSample payloads
         """
         return self.load_batch(idxs)
 
-    def load_batch(self, indices: list[int]) -> list[dict]:
+    def load_batch(self, indices: list[int]) -> list[CogitaoSampleNumpy]:
         """Read a batch of samples using efficient fancy indexing.
 
         Indices MUST be valid and within bounds.
@@ -659,7 +660,7 @@ class CogitaoDataset(Dataset):
     def __len__(self) -> int:
         return self._length
 
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor | list]:
+    def __getitem__(self, idx: int) -> CogitaoSample:
         """Load a sample from dataset.
 
         Args:
@@ -682,7 +683,7 @@ class CogitaoDataset(Dataset):
             "seq_len": torch.tensor(sample["seq_len"]).long(),
         }
 
-    def __getitems__(self, idxs: list[int]) -> list[Dict[str, torch.Tensor | list]]:
+    def __getitems__(self, idxs: list[int]) -> list[CogitaoSample]:
         """Load multiple samples from dataset efficiently.
 
         This method is called by DataLoader when batch_sampler is used or

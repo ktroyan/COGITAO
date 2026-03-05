@@ -1,10 +1,12 @@
 import random
+from typing import Optional, TYPE_CHECKING
 
 import h5py
 import numpy as np
 import pandas as pd
 
 from . import hdf5_utils
+from .types import Task, TaskPair
 from .conditionals.single_shape_conditionals import (
     conditionals_dict as single_shape_conditionals_dict,
 )
@@ -19,6 +21,11 @@ from .transformations.shape_transformations import (
     transformations_dict,
 )
 from .utils.img_transform import to_image
+
+if TYPE_CHECKING:
+    from .transformations.shape_transformations import TransformationType
+else:
+    TransformationType = None
 
 
 class Generator:
@@ -150,7 +157,7 @@ class Generator:
             shapes_to_position.append(Shape(shape_grid))
         return shapes_to_position
 
-    def sample_transform_suite(self):
+    def sample_transform_suite(self) -> list[TransformationType]:
         """
         Sample a transformation suite for the task. The transformation suite is a list of transformations
         that will be applied to the shapes in the grid. The transformations are sampled from the
@@ -176,7 +183,8 @@ class Generator:
                 self.config.min_transformation_depth,
                 self.config.max_transformation_depth,
             )
-            transform_suite = []
+
+            transform_suite: list[TransformationType] = []
             for k in range(depth):
                 transform_suite.append(random.sample(compatible_transforms, 1)[0])
 
@@ -205,7 +213,7 @@ class Generator:
                 "Please specify allowed transformations or allowed combinations in the config"
             )
 
-    def get_shape_constraints_from_rule_sampled(self, transform_suite: list) -> list:
+    def get_shape_constraints_from_rule_sampled(self, transform_suite: list[TransformationType]) -> list:
         """
         get all shape conditionals which cannot be associated with the chosen task transforms
 
@@ -360,7 +368,7 @@ class Generator:
                         # A shape went off-grid after transformation — treat as failure
                         failed_transform_trials += 1
                         continue
-                    to_append = {
+                    to_append: TaskPair = {
                         "input": input_grid,
                         "output": output_grid,
                         "n_shapes": len(shapes_positionned),
@@ -375,7 +383,7 @@ class Generator:
                     failed_transform_trials += 1
 
             if len(generated_pairs) == self.config.n_examples:
-                task = {
+                task: Task = {
                     "pairs": generated_pairs,
                     "transformation_suite": transform_suite,
                 }
@@ -390,7 +398,7 @@ class Generator:
         )
         return {}
 
-    def _transform_task_to_image(self, task):
+    def _transform_task_to_image(self, task: Task) -> Task:
         """
         Transform all grids from pairs in a task to images.
         """

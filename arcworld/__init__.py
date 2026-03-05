@@ -1,10 +1,11 @@
+from . import metrics, tools, types
 from .config import DatasetConfig, GeneratorConfig
-from .wrapper import CogitaoDataset, ParallelGenerator
 from .generator import Generator
-from . import metrics, tools
+from .wrapper import CogitaoDataset, ParallelGenerator
 
 __all__ = [
     "CogitaoDataset",
+    "types",
     "DatasetConfig",
     "GeneratorConfig",
     "ParallelGenerator",
