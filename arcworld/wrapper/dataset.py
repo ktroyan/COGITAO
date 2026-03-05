@@ -17,7 +17,7 @@ class HDF5CogitaoStore:
     Supports incremental batch writing to build up the dataset.
     """
 
-    LATEST_VERSION: int = 1
+    LATEST_VERSION: int = 2
 
     def __init__(
         self,
@@ -67,6 +67,7 @@ class HDF5CogitaoStore:
         self.cfg = stored_cfg
         self._length = handle["inputs"].shape[0]
         self.env_shape, self.env_dtype = self._get_shape_and_dtype(self.cfg)
+        self.max_seq_len = self._get_max_seq_len(self.cfg)
         self._close_handle()
 
     def _validate_cfg(self, *, provided_cfg: DatasetConfig, stored_cfg: DatasetConfig):
@@ -76,6 +77,17 @@ class HDF5CogitaoStore:
             raise ValueError(
                 "Provided DatasetConfig does not match the config stored in this HDF5 file."
             )
+
+    @staticmethod
+    def _get_max_seq_len(cfg: DatasetConfig) -> int:
+        """Max number of frames stored per sample: input grid + one per transformation step."""
+        if cfg.allowed_combinations is not None:
+            max_depth = max(len(c) for c in cfg.allowed_combinations)
+        else:
+            max_depth = (
+                cfg.max_transformation_depth or 0
+            )  # Protected by config validation; set to 0 for type checker
+        return max_depth + 1
 
     def _get_shape_and_dtype(self, cfg: DatasetConfig):
         env_format = cfg.env_format
@@ -149,6 +161,25 @@ class HDF5CogitaoStore:
                 maxshape=(None,),
                 chunks=(chunk_size,),
                 dtype=vlen_str,
+            )
+
+            # full_grid_sequence: input grid + one frame per transformation step, padded to max_seq_len
+            max_seq_len = HDF5CogitaoStore._get_max_seq_len(cfg)
+            f.create_dataset(
+                "full_grid_sequence",
+                shape=(0, max_seq_len, *shape),
+                maxshape=(None, max_seq_len, *shape),
+                chunks=(chunk_size, max_seq_len, *shape),
+                dtype=dtype,
+                compression="lzf",
+            )
+            f.create_dataset(
+                "seq_len",
+                shape=(0,),
+                maxshape=(None,),
+                chunks=(chunk_size,),
+                dtype="int32",
+                compression="lzf",
             )
 
         print(f"Created dataset at {self.path}")
@@ -299,12 +330,13 @@ class HDF5CogitaoStore:
         if unique_sorted[0] < 0 or unique_sorted[-1] >= self._length:
             raise IndexError("Index range out of bounds")
 
-
         batch_inputs = f["inputs"][unique_sorted]
         batch_outputs = f["outputs"][unique_sorted]
         batch_grid_sizes = f["grid_sizes"][unique_sorted]
         batch_n_shapes = f["n_shapes"][unique_sorted]
         batch_transformation_suites = f["transformation_suites"][unique_sorted]
+        batch_sequences = f["full_grid_sequence"][unique_sorted]
+        batch_seq_lens = f["seq_len"][unique_sorted]
 
         def _batch_to_dict(mapped_idx: np.ndarray):
             ts_serial = batch_transformation_suites[mapped_idx]
@@ -316,6 +348,8 @@ class HDF5CogitaoStore:
                 "transformation_suite": json.loads(ts_serial)
                 if ts_serial and ts_serial != "null"
                 else [],
+                "full_grid_sequence": batch_sequences[mapped_idx],
+                "seq_len": int(batch_seq_lens[mapped_idx]),
             }
 
         results = list(map(_batch_to_dict, inverse_map))
@@ -363,6 +397,8 @@ class HDF5CogitaoStore:
             "grid_sizes",
             "n_shapes",
             "transformation_suites",
+            "full_grid_sequence",
+            "seq_len",
         ]:
             f[dset_name].resize(new_length, axis=0)
 
@@ -372,6 +408,8 @@ class HDF5CogitaoStore:
         batch_grid_sizes = []
         batch_n_shapes = []
         batch_transformations = []
+        batch_sequences = []
+        batch_seq_lens = []
 
         env_format = self.cfg.env_format
         expected_shape = self.env_shape
@@ -407,6 +445,28 @@ class HDF5CogitaoStore:
 
                 batch_transformations.append(ts_json)
 
+                # Build padded sequence array
+                raw_seq = pair.get("full_grid_sequence", [])[: self.max_seq_len]
+                actual_len = len(raw_seq)
+                if env_format == "grid":
+                    max_dim = expected_shape[-1]
+                    seq_arr = np.full(
+                        (self.max_seq_len, max_dim, max_dim), -1, dtype=np.int8
+                    )
+                    for k, frame in enumerate(raw_seq):
+                        if frame is not None:
+                            h, w = frame.shape
+                            seq_arr[k, :h, :w] = frame
+                else:
+                    seq_arr = np.zeros(
+                        (self.max_seq_len, *expected_shape), dtype=np.float32
+                    )
+                    for k, frame in enumerate(raw_seq):
+                        if frame is not None:
+                            seq_arr[k] = frame
+                batch_sequences.append(seq_arr)
+                batch_seq_lens.append(actual_len)
+
         # Write batches
         f["inputs"][start_idx:new_length] = np.array(batch_inputs)
         f["outputs"][start_idx:new_length] = np.array(batch_outputs)
@@ -415,6 +475,8 @@ class HDF5CogitaoStore:
         f["transformation_suites"][start_idx:new_length] = np.array(
             batch_transformations, dtype=object
         )
+        f["full_grid_sequence"][start_idx:new_length] = np.array(batch_sequences)
+        f["seq_len"][start_idx:new_length] = np.array(batch_seq_lens, dtype=np.int32)
 
         # Update internal length
         self._length = new_length
@@ -614,6 +676,10 @@ class CogitaoDataset(Dataset):
             "grid_sizes": torch.from_numpy(sample["grid_sizes"]).long(),
             "n_shapes": torch.from_numpy(sample["n_shapes"]).long(),
             "transformation_suite": json.dumps(sample["transformation_suite"] or []),
+            "full_grid_sequence": torch.from_numpy(
+                sample["full_grid_sequence"]
+            ).float(),
+            "seq_len": torch.tensor(sample["seq_len"]).long(),
         }
 
     def __getitems__(self, idxs: list[int]) -> list[Dict[str, torch.Tensor | list]]:
@@ -646,6 +712,10 @@ class CogitaoDataset(Dataset):
                         "transformation_suite": json.dumps(
                             sample["transformation_suite"] or []
                         ),
+                        "full_grid_sequence": torch.from_numpy(
+                            sample["full_grid_sequence"]
+                        ).float(),
+                        "seq_len": torch.tensor(sample["seq_len"]).long(),
                     }
                 )
             return results
