@@ -1,4 +1,76 @@
-## Install dependencies 
+## Usage as a package
+### Installation
+Using uv:
+```shell
+uv add git+https://github.com/yassinetb/COGITAO.git
+```
+
+Using pip:
+```shell
+pip install git+https://github.com/yassinetb/COGITAO.git
+```
+
+Using poetry:
+```shell
+poetry add git+https://github.com/yassinetb/COGITAO.git
+```
+
+If you plan to use CogitaoDataset, you should install torch as well: 
+  pip: https://pytorch.org/get-started/locally/
+  uv: https://docs.astral.sh/uv/guides/integration/pytorch/
+
+### Usage
+
+To generate dataset:
+```python
+from arcworld.generator import GeneratorConfig, DatasetConfig, ParallelGenerator
+
+cfg = GeneratorConfig(
+    output_dir="./data",
+    output_file="train.h5",
+    num_workers=64,
+    dataset=DatasetConfig(
+        env_format="image",
+        image_size=224,
+        image_upscale_method="nearest",
+        n_examples=10000,
+        batch_size=16,
+        min_grid_size=32,
+        max_grid_size=32,
+        min_n_shapes_per_grid=2,
+        max_n_shapes_per_grid=3,
+        allowed_transformations=[
+            "rot90",
+        ],
+        min_transformation_depth=0,
+        max_transformation_depth=0,
+        shape_compulsory_conditionals=[
+            "is_shape_less_than_11_rows",
+            "is_shape_less_than_11_cols",
+            "is_shape_more_than_2_cell",
+            "is_shape_evenly_colored",
+            "is_shape_fully_connected",
+            "is_shape_not_hollow",
+        ],
+    ),
+)
+
+# Generate items
+parallel_generator = ParallelGenerator(cfg)
+parallel_generator.generate()
+```
+
+To use for pytorch dataloader:
+```python
+from arcworld.generator import CogitaoDataset
+from torch.utils.data import DataLoader 
+dataset = CogitaoDataset("dset_images.h5")
+
+dataloader= DataLoader(dataset, batch_size=dataset.cfg.batch_size, ...)
+```
+<b>Note: </b>setting batch_size=dataset.cfg.batch_size is purely performance improvement. It is not strictly necessary
+
+## Usage from source 
 
 We use [poetry](https://python-poetry.org/) as our dependency manager and build
 system framework. Please install it using:

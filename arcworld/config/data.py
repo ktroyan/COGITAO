@@ -1,8 +1,12 @@
-from typing import List, Optional
-from pydantic import BaseModel, Field, model_validator, field_validator
+from typing import List, Literal, Optional
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from ..conditionals.single_shape_conditionals import ConditionalType
+from ..transformations.shape_transformations import TransformationType
 
 
-class ConfigValidator(BaseModel):
+class DatasetConfig(BaseModel):
     min_n_shapes_per_grid: int = Field(..., ge=1)
     max_n_shapes_per_grid: int = Field(..., ge=1)
 
@@ -10,14 +14,28 @@ class ConfigValidator(BaseModel):
     max_grid_size: int = Field(..., ge=1)
 
     n_examples: int = Field(..., ge=1)
+    batch_size: int = Field(
+        default=1, ge=1, description="Only relevant for ParallelGenerator."
+    )
 
-    allowed_transformations: Optional[List[str]] = None
-    allowed_combinations: Optional[List[List[str]]] = None
+    allowed_transformations: Optional[List[TransformationType]] = None
+    allowed_combinations: Optional[List[List[TransformationType]]] = None
 
     min_transformation_depth: Optional[int] = Field(default=None, ge=0)
     max_transformation_depth: Optional[int] = Field(default=None, ge=0)
 
-    shape_compulsory_conditionals: List[str]
+    shape_compulsory_conditionals: List[ConditionalType]
+
+    env_format: Literal["grid", "image"] = "grid"
+
+    image_size: tuple[int, int] | int | None = Field(
+        default=None,
+        description="Image size to upscale to. Is ignored if env_format is set to 'grid'. IS REQUIRED if env_format is set to 'image'.",
+    )
+    image_upscale_method: Literal["nearest", "bilinear"] = Field(
+        default="nearest",
+        description="Upscaling method for images. Only works if env_format is set to 'image'.",
+    )
 
     @field_validator("allowed_transformations")
     @classmethod
@@ -32,6 +50,12 @@ class ConfigValidator(BaseModel):
         if v is not None and len(v) == 0:
             return None
         return v
+
+    @model_validator(mode="after")
+    def check_img_env_config(self):
+        if self.env_format == "image" and self.image_size is None:
+            raise ValueError("image_size must be set if env_format is 'image'")
+        return self
 
     @model_validator(mode="after")
     def check_constraints(self):

@@ -1,30 +1,43 @@
-import numpy as np
 import random
+from typing import Optional, TYPE_CHECKING
+
 import h5py
+import numpy as np
 import pandas as pd
 
 from . import hdf5_utils
-from .shapes.base import Shape
+from .types import Task, TaskPair
+from .conditionals.single_shape_conditionals import (
+    conditionals_dict as single_shape_conditionals_dict,
+)
+from .config import DatasetConfig
 from .general_utils import (
     position_shape_in_world,
     randomly_add_shape_to_world,
 )
-from .conditionals.single_shape_conditionals import (
-    conditionals_dict as single_shape_conditionals_dict,
-)
+from .shapes.base import Shape
 from .transformations.shape_transformations import (
-    transformations_dict,
     transformations_constraints,
+    transformations_dict,
 )
-from .utils.config_validation import ConfigValidator
+from .utils.img_transform import to_image
+
+if TYPE_CHECKING:
+    from .transformations.shape_transformations import TransformationType
+else:
+    TransformationType = None
 
 
 class Generator:
-    def __init__(self, config: dict | ConfigValidator, debug_mode=False):
-        if isinstance(config, ConfigValidator):
-            self.config = config
+    def __init__(self, config: DatasetConfig, debug_mode=False):
+        if isinstance(config, dict):
+            print(
+                "Warning: passing config as a dict is deprecated and will be removed in future versions. Please pass a DatasetConfig instance instead."
+            )
+            self.config = DatasetConfig.model_validate(config)
         else:
-            self.config = ConfigValidator(**config)
+            self.config = config
+
         self.transformations_dict = transformations_dict  ## Loads transformations_dict into the class (from the ...transformation.py files)
         self.transformations_constraints = transformations_constraints
 
@@ -116,15 +129,13 @@ class Generator:
             for col in conditionals_not_to_satisfy_indices
         ]
 
-        if conditions_ones:
-            combined_conditions = conditions_ones[0]
-            for condition in conditions_ones[1:]:
-                combined_conditions &= condition
+        # Default: all rows pass (no constraints)
+        combined_conditions = pd.Series(
+            True, index=self.shape_conditionals_table_df.index
+        )
 
-        # For the zeros, start with the first condition and chain with &
-        if conditions_zeros:
-            for condition in conditions_zeros:
-                combined_conditions &= condition
+        for condition in [*conditions_ones, *conditions_zeros]:
+            combined_conditions &= condition
 
         # Filter the DataFrame based on the combined conditions
         return self.shape_conditionals_table_df[combined_conditions].index.tolist()
@@ -146,7 +157,7 @@ class Generator:
             shapes_to_position.append(Shape(shape_grid))
         return shapes_to_position
 
-    def sample_transform_suite(self):
+    def sample_transform_suite(self) -> list[TransformationType]:
         """
         Sample a transformation suite for the task. The transformation suite is a list of transformations
         that will be applied to the shapes in the grid. The transformations are sampled from the
@@ -161,18 +172,27 @@ class Generator:
         elif (
             self.config.allowed_transformations is not None
         ):  ## If allowed transformations are specified, sample from them
-            compatible_transforms = list(self.transformations_dict.keys())
-            compatible_transforms = [
-                t
-                for t in compatible_transforms
-                if t in self.config.allowed_transformations
-            ]
+            compatible_transforms:list[TransformationType] = list(
+                filter(
+                    lambda x: x in self.config.allowed_transformations,
+                    self.transformations_dict.keys(),
+                )
+            )
+
+            if (
+                self.config.min_transformation_depth is None
+                or self.config.max_transformation_depth is None
+            ):
+                raise Exception(
+                    "Please specify both min_transformation_depth and max_transformation_depth in the config when allowed_transformations is specified."
+                )
 
             depth = random.randint(
                 self.config.min_transformation_depth,
                 self.config.max_transformation_depth,
             )
-            transform_suite = []
+
+            transform_suite: list[TransformationType] = []
             for k in range(depth):
                 transform_suite.append(random.sample(compatible_transforms, 1)[0])
 
@@ -201,7 +221,7 @@ class Generator:
                 "Please specify allowed transformations or allowed combinations in the config"
             )
 
-    def get_shape_constraints_from_rule_sampled(self, transform_suite: list) -> list:
+    def get_shape_constraints_from_rule_sampled(self, transform_suite: list[TransformationType]) -> list:
         """
         get all shape conditionals which cannot be associated with the chosen task transforms
 
@@ -276,7 +296,9 @@ class Generator:
                 output_grid = position_shape_in_world(output_grid, transformed_shape)
             else:
                 output_grid = None  # If the shape is null, we invalidate the whole grid
-            full_grid_sequence.append(output_grid.copy())
+            full_grid_sequence.append(
+                output_grid.copy() if output_grid is not None else None
+            )
         return output_grid, full_grid_sequence
 
     def apply_transform_suite_to_grid_2(
@@ -320,16 +342,11 @@ class Generator:
                 temp_grid.copy() if temp_grid is not None else None
             )
 
-        # Final output grid is the last valid temp_grid
-        output_grid = (
-            full_grid_sequence[-1] if full_grid_sequence[-1] is not None else None
-        )
+        output_grid = full_grid_sequence[-1]
         return output_grid, full_grid_sequence
 
-    def generate_single_task(self):
-        task = {"pairs": [], "transform_suite": None}
-        n_config_trials = 0
-        while n_config_trials < self.max_trials_for_configuration:
+    def generate_single_task(self) -> Optional[Task]:
+        for _ in range(self.max_trials_for_configuration):
             transform_suite = self.sample_transform_suite()
 
             # Probably some edits needed here --> not a practical way of operating
@@ -343,10 +360,9 @@ class Generator:
 
             failed_transform_trials = 0
             generated_pairs = []
-            while (
-                failed_transform_trials < self.max_trials_for_function_combination
-                and len(generated_pairs) < self.config.n_examples
-            ):
+            for _ in range(self.config.n_examples):
+                if failed_transform_trials >= self.max_trials_for_function_combination:
+                    break
                 try:
                     input_grid, shapes_positionned = self.set_up_initial_grid(
                         compatible_shape_rows=compatible_shape_rows
@@ -356,7 +372,11 @@ class Generator:
                             transform_suite, input_grid, shapes_positionned
                         )
                     )
-                    to_append = {
+                    if output_grid is None:
+                        # A shape went off-grid after transformation — treat as failure
+                        failed_transform_trials += 1
+                        continue
+                    to_append: TaskPair = {
                         "input": input_grid,
                         "output": output_grid,
                         "n_shapes": len(shapes_positionned),
@@ -364,29 +384,47 @@ class Generator:
                         "full_grid_sequence": full_grid_sequence,
                     }
                     generated_pairs.append(to_append)
-                    failed_transform_trials = 0  # If we successfully generate a grid, we reset the failed trials
+                    failed_transform_trials = 0  # Reset on success
                 except Exception as e:
                     if self.debug_mode:
                         print(e)
                     failed_transform_trials += 1
 
             if len(generated_pairs) == self.config.n_examples:
-                n_config_trials = (
-                    0  # If we successfully generate a grid, we reset the config trials
-                )
-                return {
+                task: Task = {
                     "pairs": generated_pairs,
-                    "full_grid_sequence": full_grid_sequence,
                     "transformation_suite": transform_suite,
                 }
-            elif failed_transform_trials >= self.max_trials_for_function_combination:
-                n_config_trials += 1
-            else:
-                print("Something went wrong with the generation of the task.")
+                if self.config.env_format == "image":
+                    return self._transform_task_to_image(task)
+                return task
 
         print(
             "Failed to generate a task with the current configuration. Please consider updating the config file. \n \
               Config is the following:",
             self.config,
         )
-        return {}
+        return None
+
+    def _transform_task_to_image(self, task: Task) -> Task:
+        """
+        Transform all grids from pairs in a task to images.
+        """
+        to_image_with_cfg = lambda x: to_image(
+            x, self.config.image_size, self.config.image_upscale_method, "CHW"
+        )
+        return {
+            "pairs": [
+                {
+                    "input": to_image_with_cfg(pair["input"]),
+                    "output": to_image_with_cfg(pair["output"]),
+                    "n_shapes": pair["n_shapes"],
+                    "grid_size": pair["grid_size"],
+                    "full_grid_sequence": [
+                        to_image_with_cfg(g) for g in pair["full_grid_sequence"]
+                    ],
+                }
+                for pair in task["pairs"]
+            ],
+            "transformation_suite": task["transformation_suite"],
+        }

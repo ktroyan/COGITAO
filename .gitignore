@@ -5,6 +5,4 @@ shapes.h5
 paper_plots/*
 .env
 arcworld/datasets/million_positionned_objects.zipbefore_arc_datasets
-
-outputs
-checkpoints
+.venv
