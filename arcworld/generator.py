@@ -397,7 +397,6 @@ class Generator:
     def _transform_task_to_image(self, task):
         """
         Transform all grids from pairs in a task to images.
-        # TODO: implement this function
         """
         to_image_with_cfg = lambda x: to_image(
             x, self.config.image_size, self.config.image_upscale_method, "CHW"

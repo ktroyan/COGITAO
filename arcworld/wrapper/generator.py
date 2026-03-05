@@ -189,9 +189,9 @@ class ParallelGenerator:
 
                     if len(batch) >= min(save_batch_size, num_samples - total_saved):
                         try:
-                            store.save_batch(batch)
-                            total_saved += len(batch)
-                            pbar.update(len(batch))
+                            saved = store.save_batch(batch)
+                            total_saved += len(saved)
+                            pbar.update(len(saved))
                         except Exception as e:
                             _logger.error("Error while saving batch: %s", e)
                             import traceback
@@ -206,9 +206,9 @@ class ParallelGenerator:
                 # Main process writes remaining samples to H5
                 if batch and total_saved < num_samples:
                     to_save = batch[: num_samples - total_saved]
-                    store.save_batch(to_save)
-                    total_saved += len(to_save)
-                    pbar.update(len(to_save))
+                    saved = store.save_batch(to_save)
+                    total_saved += len(saved)
+                    pbar.update(len(saved))
 
         finally:
             _logger.info("Stopping worker processes...")
@@ -217,14 +217,17 @@ class ParallelGenerator:
             # Give workers a moment to notice the shutdown event
             time.sleep(1)
 
-            # First pass: SIGTERM
+            # SIGTERM all workers at once, then sleep once while they all die in parallel.
+            # (A per-worker join loop would serialize the wait across N workers.)
             for w in workers:
                 if w.is_alive():
                     w.terminate()
 
-            # Wait briefly for graceful exit
+            time.sleep(2)  # give all workers time to exit simultaneously
+
+            # Non-blocking joins just to reap the OS process entries.
             for w in workers:
-                w.join(timeout=0.1)
+                w.join(timeout=0)
 
             # Detach main-process feeder thread before touching the queue
             sample_queue.cancel_join_thread()

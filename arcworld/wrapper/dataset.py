@@ -9,8 +9,6 @@ import numpy as np
 
 from ..config import DatasetConfig
 
-# TODO: Exclude n_examples from the stored config
-
 
 class HDF5CogitaoStore:
     """HDF5-based persistent storage for pre-generated training samples in optimized format.
@@ -268,7 +266,7 @@ class HDF5CogitaoStore:
         """
         return self.load_batch([idx])[0]
 
-    def __getitems__(self, idxs: list[int]) -> list[Optional[dict]]:
+    def __getitems__(self, idxs: list[int]) -> list[dict]:
         """Load multiple samples from store by index.
 
         Args:
@@ -291,21 +289,16 @@ class HDF5CogitaoStore:
            List of dictionary payloads containing "inputs", "outputs", etc.
         """
         f = self._get_read_handle()
+        if len(indices) == 0:
+            return []
 
         # h5py requires sorted indices for best performance and compatibility.
         indices_arr = np.array(indices)
-        sorted_idx_args = np.argsort(indices_arr)
-        sorted_indices = indices_arr[sorted_idx_args]
-
-        if len(sorted_indices) > 0 and (
-            sorted_indices[0] < 0 or sorted_indices[-1] >= self._length
-        ):
-            raise IndexError("Index range out of bounds")
-
         unique_sorted, inverse_map = np.unique(indices_arr, return_inverse=True)
 
-        if len(unique_sorted) == 0:
-            return []
+        if unique_sorted[0] < 0 or unique_sorted[-1] >= self._length:
+            raise IndexError("Index range out of bounds")
+
 
         batch_inputs = f["inputs"][unique_sorted]
         batch_outputs = f["outputs"][unique_sorted]
@@ -313,21 +306,19 @@ class HDF5CogitaoStore:
         batch_n_shapes = f["n_shapes"][unique_sorted]
         batch_transformation_suites = f["transformation_suites"][unique_sorted]
 
-        results = []
-
-        for mapped_idx in inverse_map:
+        def _batch_to_dict(mapped_idx: np.ndarray):
             ts_serial = batch_transformation_suites[mapped_idx]
-            results.append(
-                {
-                    "inputs": batch_inputs[mapped_idx],
-                    "outputs": batch_outputs[mapped_idx],
-                    "grid_sizes": batch_grid_sizes[mapped_idx],
-                    "n_shapes": batch_n_shapes[mapped_idx],
-                    "transformation_suite": json.loads(ts_serial)
-                    if ts_serial and ts_serial != "null"
-                    else [],
-                }
-            )
+            return {
+                "inputs": batch_inputs[mapped_idx],
+                "outputs": batch_outputs[mapped_idx],
+                "grid_sizes": batch_grid_sizes[mapped_idx],
+                "n_shapes": batch_n_shapes[mapped_idx],
+                "transformation_suite": json.loads(ts_serial)
+                if ts_serial and ts_serial != "null"
+                else [],
+            }
+
+        results = list(map(_batch_to_dict, inverse_map))
 
         return results
 
@@ -508,7 +499,7 @@ class HDF5CogitaoStore:
         if "inputs" not in f:
             print("No 'inputs' dataset found in store.")
             return
-        
+
         if self.cfg.env_format == "grid":
             print("Grid format not supported for show_examples.")
             return
@@ -661,7 +652,7 @@ class CogitaoDataset(Dataset):
 
         except Exception as e:
             print(f"Error in batch reading: {e}")
-            return []
+            raise
 
     def __getstate__(self):
         """Prepare for pickling (DataLoader multiprocessing)."""
