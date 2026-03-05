@@ -382,10 +382,6 @@ class Generator:
                 if self.config.env_format == "image":
                     return self._transform_task_to_image(task)
                 return task
-            elif failed_transform_trials >= self.max_trials_for_function_combination:
-                continue
-            else:
-                print("Something went wrong with the generation of the task.")
 
         print(
             "Failed to generate a task with the current configuration. Please consider updating the config file. \n \
