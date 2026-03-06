@@ -1,62 +1,35 @@
-# Systematic Generalization 
-import copy
+from arcworld.config import DatasetConfig
 
-# Fixed Parameters: 
+from .entry import ExperimentEntry
 
-se_path = "cogitao_datasets/sample_efficiency"
-
-se_base_config = {
-    "min_n_shapes_per_grid": 2,
-    "max_n_shapes_per_grid": 2,
-    "n_examples": 1,
-    "min_grid_size": 15,
-    "max_grid_size": 15,
-    "allowed_combinations": None,
-    "allowed_transformations": None,
-    "min_transformation_depth": None,
-    "max_transformation_depth": None,
-    "shape_compulsory_conditionals": ["is_shape_less_than_6_rows", 
-                                      "is_shape_less_than_6_cols", 
-                                      "is_shape_fully_connected"],
-    "saving_path": None,
-}
-
-def make_config(combos, setting, exp_number, split, min_size = 15, max_size = 15):
-    config = copy.deepcopy(se_base_config)
-    config["allowed_combinations"] = combos
-    config["saving_path"] = f"{se_path}/exp_setting_{setting}/experiment_{exp_number}/{split}.json"
-    return config
-
-sample_efficiency_configs = []
-
-sample_efficiency_configs.append(make_config(
-    [["translate_up"]], 1, 1, "train"))
-
-sample_efficiency_configs.append(make_config(
-    [["rot90"]], 1, 2, "train"))
-
-sample_efficiency_configs.append(make_config(
-    [["mirror_horizontal"]], 1, 3, "train"))
-
-sample_efficiency_configs.append(make_config(
-    [["extend_contours_different_color"]], 1, 4, "train"))
-
-sample_efficiency_configs.append(make_config(
-    [["empty_inside_pixels"]], 1, 5, "train"))
-
-sample_efficiency_configs.append(make_config(
-    [["crop_top_side"]], 1, 6, "train"))
-
-sample_efficiency_configs.append(make_config(
-    [["fill_holes_different_color"]], 1, 7, "train"))
-
-sample_efficiency_configs.append(make_config(
-    [["double_up"]], 1, 8, "train"))
-
-sample_efficiency_configs.append(make_config(
-    [["change_shape_color"]], 1, 9, "train"))
-
-sample_efficiency_configs.append(make_config(
-    [["pad_shape"]], 1, 10, "train"))
+_BASE = dict(
+    min_n_shapes_per_grid=2,
+    max_n_shapes_per_grid=2,
+    n_examples=1,
+    min_grid_size=15,
+    max_grid_size=15,
+    shape_compulsory_conditionals=[
+        "is_shape_less_than_6_rows",
+        "is_shape_less_than_6_cols",
+        "is_shape_fully_connected",
+    ],
+)
 
 
+def make_entry(combos, setting, exp_number, split):
+    cfg = DatasetConfig(**_BASE, allowed_combinations=combos)
+    return ExperimentEntry(cfg=cfg, setting=setting, experiment=exp_number, split=split)
+
+
+sample_efficiency_configs: list[ExperimentEntry] = [
+    make_entry([["translate_up"]], 1, 1, "train"),
+    make_entry([["rot90"]], 1, 2, "train"),
+    make_entry([["mirror_horizontal"]], 1, 3, "train"),
+    make_entry([["extend_contours_different_color"]], 1, 4, "train"),
+    make_entry([["empty_inside_pixels"]], 1, 5, "train"),
+    make_entry([["crop_top_side"]], 1, 6, "train"),
+    make_entry([["fill_holes_different_color"]], 1, 7, "train"),
+    make_entry([["double_up"]], 1, 8, "train"),
+    make_entry([["change_shape_color"]], 1, 9, "train"),
+    make_entry([["pad_shape"]], 1, 10, "train"),
+]

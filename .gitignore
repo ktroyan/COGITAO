@@ -4,5 +4,6 @@
 shapes.h5
 paper_plots/*
 .env
-arcworld/datasets/million_positionned_objects.zipbefore_arc_datasets
+arcworld/datasets/million_positionned_objects.zip
+before_arc_datasets
 .venv
