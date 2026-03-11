@@ -341,6 +341,7 @@ def _load_studies():
     from experiment_configs.compositionality_gridsize import compositionality_gridsize_config
     from experiment_configs.generalization import generalization_configs
     from experiment_configs.sample_efficiency import sample_efficiency_configs
+    from experiment_configs.test_config_for_klim import test_config_for_klim
 
     STUDIES["c0"] = c0_configs
     STUDIES["compositionality"] = compositionality_configs
@@ -348,6 +349,7 @@ def _load_studies():
     STUDIES["sample_efficiency"] = sample_efficiency_configs
     STUDIES["compositionality_gridsize"] = compositionality_gridsize_config
     STUDIES["c4"] = c4_configs
+    STUDIES["test_config_for_klim"] = test_config_for_klim
 
 
 # ---------------------------------------------------------------------------
