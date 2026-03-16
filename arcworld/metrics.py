@@ -113,6 +113,8 @@ def number_of_perfectly_reconstructed_objects_grid(
 ) -> tuple[int, int, int, int]:
     """Compare how many objects in *target* are perfectly reconstructed by *preds*.
 
+    All-white (all-zero) predicted grids are ignored.
+
     Args:
         target: (H, W) target grid
         preds:  (H, W) predicted grid  OR  (N, H, W) array of N object grids
@@ -127,8 +129,8 @@ def number_of_perfectly_reconstructed_objects_grid(
         # Single (H, W) grid – extract objects from it
         found_object_grids = _extract_objects(preds)
     else:
-        # (N, H, W) – each slice is already one object grid
-        found_object_grids = list(preds)
+        # (N, H, W) – each slice is already one object grid; drop all-white slots
+        found_object_grids = [p for p in preds if np.any(p > 0)]
 
     target_objects_found = [False] * len(target_objects)
     found = 0
