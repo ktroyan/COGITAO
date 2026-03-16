@@ -7,3 +7,7 @@ paper_plots/*
 arcworld/datasets/million_positionned_objects.zip
 before_arc_datasets
 .venv
+data/*
+Benni_README.md
+check_benni_dataset.ipynb
+generate_benni_dataset.py

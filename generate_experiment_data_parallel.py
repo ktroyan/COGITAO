@@ -41,22 +41,33 @@ logger = logging.getLogger(__name__)
 # Worker
 # ---------------------------------------------------------------------------
 
-def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_event):
+def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_event, done_event):
     """Worker process: pulls (combo_idx, combo) items, generates tasks, pushes results.
 
     Caches Generator instances per combo to avoid re-loading the shape HDF5 file.
     """
     gen_cache: dict[tuple, Generator] = {}
-    failures = 0
+    combo_failures: dict[tuple, int] = {}  # per-combo failure counter
     max_consecutive_failures = 50
+    empty_streak = 0
 
     while not shutdown_event.is_set():
+        # If the main process signals all work is done, exit cleanly
+        if done_event.is_set():
+            break
+
         try:
             item = work_queue.get(timeout=1)
         except QueueEmpty:
+            empty_streak += 1
+            # If queue has been empty for a while and done is signalled, exit
+            if empty_streak >= 3 and done_event.is_set():
+                break
             continue
         except KeyboardInterrupt:
             break
+
+        empty_streak = 0
 
         if item is None:
             break  # Sentinel — exit
@@ -69,20 +80,24 @@ def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_
             cfg_copy.allowed_combinations = [list(combo)]
             gen_cache[combo_key] = Generator(cfg_copy)
 
+        if combo_key not in combo_failures:
+            combo_failures[combo_key] = 0
+
         gen = gen_cache[combo_key]
         try:
             task = gen.generate_single_task()
             if task is None:
-                failures += 1
-                if failures >= max_consecutive_failures:
-                    logger.error(f"Worker {worker_id}: {max_consecutive_failures} consecutive failures for combo {combo}. Stopping.")
-                    break
+                combo_failures[combo_key] += 1
+                if combo_failures[combo_key] >= max_consecutive_failures:
+                    logger.error(f"Worker {worker_id}: {max_consecutive_failures} consecutive failures for combo {combo}. Dropping this combo.")
+                    # Don't re-enqueue — this combo is broken. Don't kill the worker.
+                    continue
                 # Re-enqueue so another attempt can be made
                 work_queue.put(item)
                 continue
 
             result_queue.put((task, combo_idx), timeout=5)
-            failures = 0
+            combo_failures[combo_key] = 0
         except QueueFull:
             # Put work item back so it isn't lost
             work_queue.put(item)
@@ -90,10 +105,10 @@ def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_
         except KeyboardInterrupt:
             break
         except Exception as e:
-            failures += 1
-            if failures >= max_consecutive_failures:
-                logger.error(f"Worker {worker_id} hit {max_consecutive_failures} failures. Last: {e}")
-                break
+            combo_failures[combo_key] += 1
+            if combo_failures[combo_key] >= max_consecutive_failures:
+                logger.error(f"Worker {worker_id}: {max_consecutive_failures} failures for combo {combo}. Last: {e}. Dropping this combo.")
+                continue
             work_queue.put(item)
             continue
 
@@ -153,12 +168,9 @@ def generate_balanced_parallel(
         for _ in range(combo_targets[combo_idx]):
             work_queue.put((combo_idx, combo))
 
-    # Sentinel values to stop workers
-    for _ in range(num_workers):
-        work_queue.put(None)
-
     result_queue = mp.Queue(maxsize=num_workers * 16)
     shutdown_event = mp.Event()
+    done_event = mp.Event()  # Signalled when all tasks collected — workers exit cleanly
 
     # Create HDF5 store with full config
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -174,7 +186,7 @@ def generate_balanced_parallel(
     for i in range(effective_workers):
         p = mp.Process(
             target=_balanced_worker,
-            args=(i, work_queue, result_queue, dataset_cfg, shutdown_event),
+            args=(i, work_queue, result_queue, dataset_cfg, shutdown_event, done_event),
         )
         p.start()
         workers.append(p)
@@ -226,6 +238,7 @@ def generate_balanced_parallel(
                 batch = []
 
     finally:
+        done_event.set()
         shutdown_event.set()
         time.sleep(1)
         for w in workers:

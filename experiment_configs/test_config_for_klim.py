@@ -43,7 +43,7 @@ test_config_for_klim.append(
 # Test: translate_down
 test_config_for_klim.append(
     ExperimentEntry(
-        cfg=_base_cfg(n_examples=1, transformations=[["translate_down"]]),
+        cfg=_base_cfg(n_examples=1, transformations=[["rot90"]]),
         setting=1,
         experiment=1,
         split="test",
