@@ -80,20 +80,19 @@ def _extract_objects(grid: np.ndarray) -> list[np.ndarray]:
     while np.any(grid_working > 0):
         # Find first coloured pixel
         y, x = np.argwhere(grid_working > 0)[0]
-        color = grid_working[y, x]
 
-        # BFS to find all connected pixels of the same colour
+        # BFS to find all connected non-zero pixels (any colour)
         object_mask = np.zeros_like(grid_working, dtype=bool)
         object_mask[y, x] = True
         queue = {(y, x)}
         while queue:
             cy, cx = queue.pop()
-            for dy, dx in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            for dy, dx in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
                 ny, nx = cy + dy, cx + dx
                 if (
                     0 <= ny < grid_working.shape[0]
                     and 0 <= nx < grid_working.shape[1]
-                    and grid_working[ny, nx] == color
+                    and grid_working[ny, nx] > 0
                     and not object_mask[ny, nx]
                 ):
                     object_mask[ny, nx] = True
