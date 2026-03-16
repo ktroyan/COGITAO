@@ -402,4 +402,5 @@ def compare_reconstruction_images(
             "missed": missed,
             "extra": extra,
         },
+        "object_reconstruction_accuracy": (found) / ((found + missed) or 1),
     }
