@@ -369,8 +369,8 @@ def _load_studies():
     from experiment_configs.compositionality_gridsize import compositionality_gridsize_config
     from experiment_configs.generalization import generalization_configs
     from experiment_configs.sample_efficiency import sample_efficiency_configs
-    from experiment_configs.test_config_for_klim import test_config_for_klim
-    from experiment_configs.klim_config import compgen_basics_ktroyan_experiments
+    from experiment_configs.compgen_ktroyan import compgen_ktroyan_experiments
+    from experiment_configs.compgen_basics_ktroyan import compgen_basics_ktroyan_experiments
 
     STUDIES["c0"] = c0_configs
     STUDIES["compositionality"] = compositionality_configs
@@ -378,8 +378,8 @@ def _load_studies():
     STUDIES["sample_efficiency"] = sample_efficiency_configs
     STUDIES["compositionality_gridsize"] = compositionality_gridsize_config
     STUDIES["c4"] = c4_configs
-    STUDIES["test_config_for_klim"] = test_config_for_klim
-    STUDIES["klim_config"] = compgen_basics_ktroyan_experiments
+    STUDIES["compgen_ktroyan_experiments"] = compgen_ktroyan_experiments
+    STUDIES["compgen_basics_ktroyan_experiments"] = compgen_basics_ktroyan_experiments
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +389,9 @@ def _load_studies():
 def main():
     parser = argparse.ArgumentParser(description="Generate balanced experiment datasets in parallel.")
     parser.add_argument("--study", type=str, required=True,
-                        help="Study name (c0, compositionality, generalization, sample_efficiency, compositionality_gridsize, c4) or 'all'.")
+                        help="Study name (c0, compositionality, generalization, sample_efficiency, compositionality_gridsize, c4, compgen_ktroyan_experiments, compgen_basics_ktroyan_experiments) or 'all'.")
+    parser.add_argument("--study_name_suffix", type=str, default="",
+                        help="Optional suffix to append to study name right after the study config was loaded. This allows to use only one config file for several generations.")
     parser.add_argument("--output-dir", type=str, default="./data",
                         help="Root output directory (default: ./data)")
     parser.add_argument("--num-workers", type=int, default=16,
@@ -414,7 +416,7 @@ def main():
     for study_name in studies_to_run:
         logger.info(f"=== Running study: {study_name} ===")
         run_study(
-            study_name=study_name,
+            study_name=study_name+args.study_name_suffix,   # NOTE: I updated this
             entries=STUDIES[study_name],
             output_dir=args.output_dir,
             num_workers=args.num_workers,

@@ -1,48 +1,43 @@
-[tool.poetry]
-name = "arcworld"
+[project]
+name = "compgen-reasoning"
 version = "0.1.0"
-description = "Synthetic task generation for the ARC Challange"
-authors = ["yassinetb <ybenchekroun@outlook.com>"]
+description = "Compositional Generalization Reasoning project, Switzerland, 2025."
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.9"
-numpy = "^1.26.4"
-scipy = "^1.9.3"
-pandas = "^2.0.2"
-tqdm = "^4.65"
-matplotlib = "*"
-h5py = "^3.11.0"
-factory-boy = "^3.3.0"
-pydantic = "^2.12.5"
-pillow = "*"
-
-[tool.poetry.group.dev.dependencies]
-isort = "*"
-ruff = "*"
-black = "*"
-mypy = "*"
-
-[tool.poetry.group.test.dependencies]
-pytest = "*"
-pytest-cov = "*"
-torch = "*"
-
-[tool.black]
-line-length = 88
-
-
-[tool.isort]
-profile = "black"
-
-[tool.ruff]
-line-length = 88
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.pytest.ini_options]
-testpaths = [
-    "tests",
+requires-python = ">=3.12"
+dependencies = [
+    "torch",
+    "torchvision",
+    "scikit-learn",
+    "scipy",
+    "numpy",
+    "Pillow",
+    "opencv-python",
+    "matplotlib",
+    "pandas",
+    "pytorch-lightning",
+    "PyYAML",
+    "tensorboard",
+    "tensorboardX",
+    "wandb",
+    "loguru",
+    "omegaconf",
+    "hydra-core",
+    "jupyter",
+    "ipykernel",
+    "seaborn>=0.13.2",
+    "datasets>=3.5.0",
+    "h5py"
 ]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu124" },
+]
+torchvision = [
+    { index = "pytorch-cu124" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
