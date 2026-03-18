@@ -70,8 +70,8 @@ def main(data_folder: str, hf_repo_id: str, upload: bool) -> None:
     data_dir_path = Path(f"./datasets/{data_folder}")
     parquet_dir_path = Path(f"./datasets_parquet/{data_folder}")
     
-    settings = [1, 2, 3, 4]
-    experiments = [1]
+    settings = [int(x) for x in args.settings_range.split(",")]
+    experiments = [int(x) for x in args.experiments_range.split(",")]
 
     for setting in settings:
         for experiment in experiments:
@@ -93,6 +93,8 @@ def get_cli_args():
     argparser = argparse.ArgumentParser(description="Convert H5 datasets to Parquet and optionally upload to Hugging Face")
     argparser.add_argument("--data_folder", type=str, required=True, help="Name of the data folder (e.g., 'compgen_ktroyan', 'compgen_basics_ktroyan', etc.)")
     argparser.add_argument("--hf_repo_id", type=str, required=True, help="Hugging Face repository ID to upload to (e.g.: 'ktroyan/COGITAO')")
+    argparser.add_argument("--settings_range", type=str, default="1", help="Comma-separated list of settings to process (e.g., '1,2,3')")
+    argparser.add_argument("--experiments_range", type=str, default="1,2", help="Comma-separated list of experiments to process (e.g., '1,2')")
     argparser.add_argument("--upload", action="store_true", help="Whether to upload the converted dataset to Hugging Face")
     return argparser.parse_args()
 
