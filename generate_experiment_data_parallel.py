@@ -46,6 +46,9 @@ def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_
 
     Caches Generator instances per combo to avoid re-loading the shape HDF5 file.
     """
+    # Re-configure logging in spawned process
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", force=True)
+
     gen_cache: dict[tuple, Generator] = {}
     combo_failures: dict[tuple, int] = {}  # per-combo failure counter
     max_consecutive_failures = 50
@@ -76,6 +79,12 @@ def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_
         combo_key = tuple(combo)
 
         if combo_key not in gen_cache:
+            # Clear cache to avoid OOM - only keep 1 Generator per worker
+            for old_gen in gen_cache.values():
+                if hasattr(old_gen, 'shape_file'):
+                    old_gen.shape_file.close()
+            gen_cache.clear()
+
             cfg_copy = dataset_cfg.model_copy()
             cfg_copy.allowed_combinations = [list(combo)]
             gen_cache[combo_key] = Generator(cfg_copy)
@@ -88,6 +97,8 @@ def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_
             task = gen.generate_single_task()
             if task is None:
                 combo_failures[combo_key] += 1
+                if combo_failures[combo_key] == 1 or combo_failures[combo_key] % 10 == 0:
+                    print(f"[Worker {worker_id}] {combo_failures[combo_key]} consecutive failures for combo {combo}", flush=True)
                 if combo_failures[combo_key] >= max_consecutive_failures:
                     logger.error(f"Worker {worker_id}: {max_consecutive_failures} consecutive failures for combo {combo}. Dropping this combo.")
                     # Don't re-enqueue — this combo is broken. Don't kill the worker.
@@ -97,6 +108,7 @@ def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_
                 continue
 
             result_queue.put((task, combo_idx), timeout=5)
+            logger.debug(f"Worker {worker_id}: Generated task for combo {combo}")
             combo_failures[combo_key] = 0
         except QueueFull:
             # Put work item back so it isn't lost
@@ -221,6 +233,9 @@ def generate_balanced_parallel(
                     # Duplicate — re-enqueue work for this combo
                     if combo_saved[combo_idx] < combo_targets[combo_idx]:
                         work_queue.put((combo_idx, combos[combo_idx]))
+                        remaining = combo_targets[combo_idx] - combo_saved[combo_idx]
+                        if remaining <= 10:
+                            print(f"[Dedup] Duplicate for combo {combos[combo_idx]}, {remaining} remaining", flush=True)
                     continue
 
                 batch.append(task)
@@ -355,6 +370,7 @@ def _load_studies():
     from experiment_configs.generalization import generalization_configs
     from experiment_configs.sample_efficiency import sample_efficiency_configs
     from experiment_configs.test_config_for_klim import test_config_for_klim
+    from experiment_configs.klim_config import compgen_basics_ktroyan_experiments
 
     STUDIES["c0"] = c0_configs
     STUDIES["compositionality"] = compositionality_configs
@@ -363,6 +379,7 @@ def _load_studies():
     STUDIES["compositionality_gridsize"] = compositionality_gridsize_config
     STUDIES["c4"] = c4_configs
     STUDIES["test_config_for_klim"] = test_config_for_klim
+    STUDIES["klim_config"] = compgen_basics_ktroyan_experiments
 
 
 # ---------------------------------------------------------------------------
