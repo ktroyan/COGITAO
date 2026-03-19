@@ -7,9 +7,9 @@
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=16
 #SBATCH --time=48:00:00
-#SBATCH --mem=128G
+#SBATCH --mem=64G
 #SBATCH --export=ALL,SRC_DIR=/cluster/raid/data/ktroyan/COGITAO
 
 set -e

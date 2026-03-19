@@ -17,8 +17,8 @@ def _base_cfg(n_examples: int, transformations: list[list[str]]) -> DatasetConfi
         env_format="grid",
         n_examples=n_examples,
         batch_size=16,
-        min_grid_size=15,
-        max_grid_size=15,
+        min_grid_size=20,
+        max_grid_size=20,
         min_n_shapes_per_grid=2,
         max_n_shapes_per_grid=2,
         allowed_combinations=transformations,
@@ -53,6 +53,11 @@ id_transformations_setting_1_exp_1 = [
     ["translate_down", "translate_down"],
 ]
 
+ood_transformations_setting_1_exp_1 = [
+    # See whether the model can recognize task tokens and use them in a basic scenario with basic composite transformations.
+    ["translate_up", "translate_right"]
+]
+
 id_transformations_setting_1_exp_2 = [
     # NOTE: "double_*" is "duplicate_*" in the paper.
     # Elementary transformations (4)
@@ -78,13 +83,9 @@ id_transformations_setting_1_exp_2 = [
     ["double_down", "double_down"],
 ]
 
-ood_transformations_setting_1_exp_1 = [
-    # See whether the model can recognize task tokens and use them in a basic scenario with basic composite transformations.
-    ["translate_up", "translate_right"]
-]
-
 ood_transformations_setting_1_exp_2 = [
     # See whether the model can recognize task tokens and use them in a basic scenario with basic composite transformations.
+    # This set of transformation may be more difficult than the one in Experiment 1 which only involves translations.
     ["double_up", "double_right"]
 ]
 
