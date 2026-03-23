@@ -174,13 +174,12 @@ def generate_balanced_parallel(
 
     logger.info(f"Generating {n_tasks} tasks ({n_combos} combos, ~{n_per_combo} each) → {output_path}")
 
-    # Enqueue work items
-    work_queue = mp.Queue()
-    for combo_idx, combo in enumerate(combos):
-        for _ in range(combo_targets[combo_idx]):
-            work_queue.put((combo_idx, combo))
-
+    # Use bounded queues to avoid exhausting system resources with large task counts
+    work_queue = mp.Queue(maxsize=num_workers * 32)
     result_queue = mp.Queue(maxsize=num_workers * 16)
+
+    # Track how many work items we still need to enqueue per combo
+    combo_remaining = {i: combo_targets[i] for i in range(n_combos)}
     shutdown_event = mp.Event()
     done_event = mp.Event()  # Signalled when all tasks collected — workers exit cleanly
 
@@ -208,10 +207,41 @@ def generate_balanced_parallel(
     batch = []
     total_saved = 0
     combo_saved = {i: 0 for i in range(n_combos)}
+    combo_idx_cycle = 0  # Round-robin index for feeding work
+
+    def feed_work_queue():
+        """Feed work items into the bounded queue (non-blocking, best effort)."""
+        nonlocal combo_idx_cycle
+        fed = 0
+        # Try to keep the queue reasonably full
+        for _ in range(num_workers * 8):
+            # Find a combo that still needs work
+            checked = 0
+            while checked < n_combos:
+                idx = combo_idx_cycle % n_combos
+                combo_idx_cycle += 1
+                checked += 1
+                if combo_remaining[idx] > 0:
+                    try:
+                        work_queue.put_nowait((idx, combos[idx]))
+                        combo_remaining[idx] -= 1
+                        fed += 1
+                        break
+                    except:
+                        return fed  # Queue full, stop feeding
+            else:
+                break  # No combos need more work
+        return fed
+
+    # Initial feed to get workers started
+    feed_work_queue()
 
     try:
         with tqdm(total=n_tasks, desc=f"Generating {output_path.name}") as pbar:
             while total_saved < n_tasks:
+                # Keep feeding work into the queue
+                feed_work_queue()
+
                 alive = sum(1 for w in workers if w.is_alive())
                 if alive == 0 and result_queue.empty():
                     logger.error("All workers died and queue is empty.")
@@ -230,9 +260,9 @@ def generate_balanced_parallel(
                 ts_str = str(task["transformation_suite"])
 
                 if not store_task_in_db(cursor, conn, task_key, task_hash, ts_str):
-                    # Duplicate — re-enqueue work for this combo
+                    # Duplicate — mark that we need another task for this combo
                     if combo_saved[combo_idx] < combo_targets[combo_idx]:
-                        work_queue.put((combo_idx, combos[combo_idx]))
+                        combo_remaining[combo_idx] += 1  # Will be fed by feed_work_queue()
                         remaining = combo_targets[combo_idx] - combo_saved[combo_idx]
                         if remaining <= 10:
                             print(f"[Dedup] Duplicate for combo {combos[combo_idx]}, {remaining} remaining", flush=True)
