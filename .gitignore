@@ -1,3 +1,9 @@
+
+/datasets
+/datasets_parquet
+/logs
+
+###
 .vscode
 **/__pycache__/
 *.h5
