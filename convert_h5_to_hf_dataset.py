@@ -58,12 +58,12 @@ def upload_dataset_to_hf(parquet_dir: Path, repo_id: str, path_in_repo: str) -> 
         repo_id=repo_id,
         path_in_repo=path_in_repo,
         repo_type="dataset",
-        commit_message="Upload compgen dataset (ID and OOD splits)",
+        commit_message="Upload dataset (ID and OOD splits)",
         ignore_patterns=["*.db"],
     )
 
 
-def main(data_folder: str, hf_repo_id: str, upload: bool) -> None:
+def main(data_folder: str, hf_repo_id: str, hf_subfolder_name: str, upload: bool) -> None:
 
     # Local paths
     suffix = "_" + data_folder.split("_")[-1] if len(data_folder.split("_")) > 3 else ""
@@ -81,7 +81,7 @@ def main(data_folder: str, hf_repo_id: str, upload: bool) -> None:
             convert_folder_to_parquet(data_dir_path_setting_exp, parquet_dir_path_setting_exp)
 
             if upload:
-                hf_path_in_repo = f"compgen/exp_setting_{setting}/experiment_{experiment}{suffix}"
+                hf_path_in_repo = f"{hf_subfolder_name}/exp_setting_{setting}/experiment_{experiment}{suffix}"
 
                 upload_dataset_to_hf(
                     parquet_dir_path_setting_exp,
@@ -93,6 +93,7 @@ def get_cli_args():
     argparser = argparse.ArgumentParser(description="Convert H5 datasets to Parquet and optionally upload to Hugging Face")
     argparser.add_argument("--data_folder", type=str, required=True, help="Name of the data folder (e.g., 'compgen_ktroyan', 'compgen_basics_ktroyan', etc.)")
     argparser.add_argument("--hf_repo_id", type=str, required=True, help="Hugging Face repository ID to upload to (e.g.: 'ktroyan/COGITAO')")
+    argparser.add_argument("--hf_subfolder_name", type=str, default="compgen/", help="Subfolder name for the Hugging Face repository (e.g., 'compgen/main', 'compgen/basics', etc.)")
     argparser.add_argument("--settings_range", type=str, default="1", help="Comma-separated list of settings to process (e.g., '1,2,3')")
     argparser.add_argument("--experiments_range", type=str, default="1,2", help="Comma-separated list of experiments to process (e.g., '1,2')")
     argparser.add_argument("--upload", action="store_true", help="Whether to upload the converted dataset to Hugging Face")
@@ -101,5 +102,5 @@ def get_cli_args():
 if __name__ == "__main__":
     args = get_cli_args()
 
-    main(args.data_folder, args.hf_repo_id, args.upload)
+    main(args.data_folder, args.hf_repo_id, args.hf_subfolder_name, args.upload)
 
