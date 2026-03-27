@@ -398,5 +398,5 @@ class TestShapeConstraints:
             shape_conditionals_not_to_satisfy=[],
         )
 
-        # Result might be empty list
-        assert isinstance(result, list)
+        # Result might be empty
+        assert isinstance(result, (list, np.ndarray))
