@@ -3,8 +3,6 @@ from typing import Optional, TYPE_CHECKING
 
 import h5py
 import numpy as np
-import pandas as pd
-
 from . import hdf5_utils
 from .types import Task, TaskPair
 from .conditionals.single_shape_conditionals import (
@@ -46,8 +44,8 @@ class Generator:
         self.shape_conditionals_table, self.conditionals_names = (
             hdf5_utils.load_conditions()
         )
-        self.shape_conditionals_table_df = pd.DataFrame(self.shape_conditionals_table)
         self.conditionals_names = {k: v for v, k in enumerate(self.conditionals_names)}
+        self._compatible_rows_cache: dict[tuple, np.ndarray] = {}
         self.shape_file = h5py.File(hdf5_utils.SHAPE_DATASET_PATH)
         self.subset_shapes()
         self.max_trials_for_function_combination = (
@@ -79,66 +77,47 @@ class Generator:
         self,
         shape_conditionals_to_satisfy: list,
         shape_conditionals_not_to_satisfy: list,
-    ) -> list:
+    ) -> np.ndarray:
         """
-        Sample shapes rows from the library of available shapes given compulsory conditionals and constraints from
-        sequence of transformations
+        Return shape row indices from the library of available shapes given compulsory
+        conditionals and constraints from the sampled transformation sequence.
 
-        This function presents some redundancy with the function "subset_shapes" above. However, it is kept
-        separately in order to allow for the possibility of having different sets of conditionals for different
-        tasks. Most importantly, it is kept for the sake of selecting shapes *not to satisfy*. subset_shapes
-        fullfills the purpose of, on the get go of the class instance (based on the config), subsetting to only
-        the shapes that are compatible with the compulsory conditionals.
+        Uses pure NumPy on the underlying conditionals table (much faster than Pandas)
+        and caches results since the same constraint sets are queried repeatedly.
 
         Parameters:
-        conditionals_to_satisfy (list): shape conditionals that sample shapes must satisfy
-        conditionals_not_to_satisfy (list): shape conditionals that sample shapes must NOT satisfy
+        shape_conditionals_to_satisfy (list): shape conditionals that sample shapes must satisfy
+        shape_conditionals_not_to_satisfy (list): shape conditionals that sample shapes must NOT satisfy
 
         Returns:
-        compatible_shape_rows (list): shape rows that are compatible to position
+        compatible_shape_rows (np.ndarray): shape row indices that are compatible
         """
-
-        ## Verify there is no overlap between conditions to satisfy and not to satisfy
-        if (
-            len(
-                set(shape_conditionals_to_satisfy)
-                & set(shape_conditionals_not_to_satisfy)
-            )
-            != 0
-        ):
-            raise Exception(
-                "There is overlap between conditions to satisfy and conditions not \
-                            to satisfy. Check your config file!"
-            )
-
-        ## "Conditional indices" serve the purpose of searching through the shape table and corresponding conditionals.
-        conditionals_to_satisfy_indices = []
-        for c in shape_conditionals_to_satisfy:
-            conditionals_to_satisfy_indices.append(self.conditionals_names[c])
-
-        conditionals_not_to_satisfy_indices = []
-        for c in shape_conditionals_not_to_satisfy:
-            conditionals_not_to_satisfy_indices.append(self.conditionals_names[c])
-
-        conditions_ones = [
-            self.shape_conditionals_table_df[col] == 1
-            for col in conditionals_to_satisfy_indices
-        ]
-        conditions_zeros = [
-            self.shape_conditionals_table_df[col] == 0
-            for col in conditionals_not_to_satisfy_indices
-        ]
-
-        # Default: all rows pass (no constraints)
-        combined_conditions = pd.Series(
-            True, index=self.shape_conditionals_table_df.index
+        # Check cache first
+        cache_key = (
+            tuple(sorted(shape_conditionals_to_satisfy)),
+            tuple(sorted(shape_conditionals_not_to_satisfy)),
         )
+        if cache_key in self._compatible_rows_cache:
+            return self._compatible_rows_cache[cache_key]
 
-        for condition in [*conditions_ones, *conditions_zeros]:
-            combined_conditions &= condition
+        if set(shape_conditionals_to_satisfy) & set(shape_conditionals_not_to_satisfy):
+            raise Exception(
+                "There is overlap between conditions to satisfy and conditions not "
+                "to satisfy. Check your config file!"
+            )
 
-        # Filter the DataFrame based on the combined conditions
-        return self.shape_conditionals_table_df[combined_conditions].index.tolist()
+        table = self.shape_conditionals_table
+        mask = np.ones(table.shape[0], dtype=bool)
+
+        for c in shape_conditionals_to_satisfy:
+            mask &= table[:, self.conditionals_names[c]] == 1
+
+        for c in shape_conditionals_not_to_satisfy:
+            mask &= table[:, self.conditionals_names[c]] == 0
+
+        result = np.where(mask)[0]
+        self._compatible_rows_cache[cache_key] = result
+        return result
 
     def randomly_sample_shapes(
         self, compatible_shape_rows: list, n_shapes_wanted: int

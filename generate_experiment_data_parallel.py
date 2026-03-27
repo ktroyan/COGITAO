@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import logging
 import multiprocessing as mp
+import sqlite3
 import time
 from pathlib import Path
 from queue import Empty as QueueEmpty
@@ -24,7 +25,7 @@ from tqdm import tqdm
 from arcworld.config import DatasetConfig
 from arcworld.general_utils import generate_key
 from arcworld.generator import Generator
-from arcworld.utils.db_utils import access_db, close_db, store_task_in_db
+from arcworld.utils.db_utils import access_db, close_db
 from arcworld.wrapper.dataset import HDF5CogitaoStore
 from experiment_configs.entry import ExperimentEntry
 
@@ -44,18 +45,16 @@ logger = logging.getLogger(__name__)
 def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_event, done_event):
     """Worker process: pulls (combo_idx, combo) items, generates tasks, pushes results.
 
-    Caches Generator instances per combo to avoid re-loading the shape HDF5 file.
+    Workers are pinned to a fixed subset of combos by the main process, so each worker
+    only needs Generators for its assigned combos (typically 1-2). All Generators are
+    built on first encounter and kept for the worker's lifetime — no eviction needed.
     """
-    # Re-configure logging in spawned process
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", force=True)
-
     gen_cache: dict[tuple, Generator] = {}
-    combo_failures: dict[tuple, int] = {}  # per-combo failure counter
+    combo_failures: dict[tuple, int] = {}
     max_consecutive_failures = 50
     empty_streak = 0
 
     while not shutdown_event.is_set():
-        # If the main process signals all work is done, exit cleanly
         if done_event.is_set():
             break
 
@@ -63,7 +62,6 @@ def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_
             item = work_queue.get(timeout=1)
         except QueueEmpty:
             empty_streak += 1
-            # If queue has been empty for a while and done is signalled, exit
             if empty_streak >= 3 and done_event.is_set():
                 break
             continue
@@ -73,18 +71,12 @@ def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_
         empty_streak = 0
 
         if item is None:
-            break  # Sentinel — exit
+            break
 
         combo_idx, combo = item
         combo_key = tuple(combo)
 
         if combo_key not in gen_cache:
-            # Clear cache to avoid OOM - only keep 1 Generator per worker
-            for old_gen in gen_cache.values():
-                if hasattr(old_gen, 'shape_file'):
-                    old_gen.shape_file.close()
-            gen_cache.clear()
-
             cfg_copy = dataset_cfg.model_copy()
             cfg_copy.allowed_combinations = [list(combo)]
             gen_cache[combo_key] = Generator(cfg_copy)
@@ -97,21 +89,15 @@ def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_
             task = gen.generate_single_task()
             if task is None:
                 combo_failures[combo_key] += 1
-                if combo_failures[combo_key] == 1 or combo_failures[combo_key] % 10 == 0:
-                    print(f"[Worker {worker_id}] {combo_failures[combo_key]} consecutive failures for combo {combo}", flush=True)
                 if combo_failures[combo_key] >= max_consecutive_failures:
-                    logger.error(f"Worker {worker_id}: {max_consecutive_failures} consecutive failures for combo {combo}. Dropping this combo.")
-                    # Don't re-enqueue — this combo is broken. Don't kill the worker.
+                    logger.error(f"Worker {worker_id}: {max_consecutive_failures} consecutive failures for combo {combo}. Dropping.")
                     continue
-                # Re-enqueue so another attempt can be made
                 work_queue.put(item)
                 continue
 
             result_queue.put((task, combo_idx), timeout=5)
-            logger.debug(f"Worker {worker_id}: Generated task for combo {combo}")
             combo_failures[combo_key] = 0
         except QueueFull:
-            # Put work item back so it isn't lost
             work_queue.put(item)
             continue
         except KeyboardInterrupt:
@@ -119,11 +105,16 @@ def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_
         except Exception as e:
             combo_failures[combo_key] += 1
             if combo_failures[combo_key] >= max_consecutive_failures:
-                logger.error(f"Worker {worker_id}: {max_consecutive_failures} failures for combo {combo}. Last: {e}. Dropping this combo.")
+                logger.error(f"Worker {worker_id}: {max_consecutive_failures} failures for combo {combo}. Last: {e}. Dropping.")
                 continue
             work_queue.put(item)
             continue
 
+    # Cleanup: close all cached HDF5 handles
+    for gen in gen_cache.values():
+        if hasattr(gen, 'shape_file'):
+            gen.shape_file.close()
+    gen_cache.clear()
     result_queue.cancel_join_thread()
 
 
@@ -174,8 +165,7 @@ def generate_balanced_parallel(
 
     logger.info(f"Generating {n_tasks} tasks ({n_combos} combos, ~{n_per_combo} each) → {output_path}")
 
-    # Use bounded queues to avoid exhausting system resources with large task counts
-    work_queue = mp.Queue(maxsize=num_workers * 32)
+    # Shared result queue (bounded to limit memory)
     result_queue = mp.Queue(maxsize=num_workers * 16)
 
     # Track how many work items we still need to enqueue per combo
@@ -191,56 +181,66 @@ def generate_balanced_parallel(
     db_path.mkdir(parents=True, exist_ok=True)
     cursor, conn = access_db(db_name, str(db_path))
 
-    # Start workers
+    # Pin combos to workers: each worker gets a fixed subset of combo indices.
+    # This ensures each worker only ever needs Generators for its assigned combos,
+    # eliminating cache thrashing entirely.
+    effective_workers = min(num_workers, n_tasks, n_combos)
+    worker_queues: list[mp.Queue] = []
+    combo_to_worker: dict[int, int] = {}
+    for w in range(effective_workers):
+        worker_queues.append(mp.Queue(maxsize=64))
+
+    for combo_idx in range(n_combos):
+        combo_to_worker[combo_idx] = combo_idx % effective_workers
+
+    # Start workers — each with its own work queue
     workers = []
-    effective_workers = min(num_workers, n_tasks)
     for i in range(effective_workers):
         p = mp.Process(
             target=_balanced_worker,
-            args=(i, work_queue, result_queue, dataset_cfg, shutdown_event, done_event),
+            args=(i, worker_queues[i], result_queue, dataset_cfg, shutdown_event, done_event),
         )
         p.start()
         workers.append(p)
 
     # Main loop: collect, dedup, write
     save_batch_size = max(effective_workers * 8, 1)
+    db_commit_interval = save_batch_size  # Commit DB every N successful inserts
+    db_pending_commits = 0
     batch = []
     total_saved = 0
     combo_saved = {i: 0 for i in range(n_combos)}
-    combo_idx_cycle = 0  # Round-robin index for feeding work
 
-    def feed_work_queue():
-        """Feed work items into the bounded queue (non-blocking, best effort)."""
-        nonlocal combo_idx_cycle
-        fed = 0
-        # Try to keep the queue reasonably full
-        for _ in range(num_workers * 8):
-            # Find a combo that still needs work
-            checked = 0
-            while checked < n_combos:
-                idx = combo_idx_cycle % n_combos
-                combo_idx_cycle += 1
-                checked += 1
-                if combo_remaining[idx] > 0:
-                    try:
-                        work_queue.put_nowait((idx, combos[idx]))
-                        combo_remaining[idx] -= 1
-                        fed += 1
-                        break
-                    except:
-                        return fed  # Queue full, stop feeding
-            else:
-                break  # No combos need more work
-        return fed
+    def feed_work_queues():
+        """Feed work items into per-worker bounded queues (non-blocking, best effort)."""
+        for combo_idx in range(n_combos):
+            if combo_remaining[combo_idx] <= 0:
+                continue
+            wid = combo_to_worker[combo_idx]
+            try:
+                worker_queues[wid].put_nowait((combo_idx, combos[combo_idx]))
+                combo_remaining[combo_idx] -= 1
+            except QueueFull:
+                pass  # Queue full, will retry next round
+
+    def _try_insert_task(cursor, task_key, task_hash, ts_str):
+        """Insert task into dedup DB without committing (batched commits)."""
+        try:
+            cursor.execute(
+                "INSERT INTO tasks (task_key, task_hash, transformations) VALUES (?, ?, ?)",
+                (task_key, task_hash, ts_str),
+            )
+            return True
+        except sqlite3.IntegrityError:
+            return False
 
     # Initial feed to get workers started
-    feed_work_queue()
+    feed_work_queues()
 
     try:
         with tqdm(total=n_tasks, desc=f"Generating {output_path.name}") as pbar:
             while total_saved < n_tasks:
-                # Keep feeding work into the queue
-                feed_work_queue()
+                feed_work_queues()
 
                 alive = sum(1 for w in workers if w.is_alive())
                 if alive == 0 and result_queue.empty():
@@ -259,14 +259,15 @@ def generate_balanced_parallel(
                 task_key = generate_key()
                 ts_str = str(task["transformation_suite"])
 
-                if not store_task_in_db(cursor, conn, task_key, task_hash, ts_str):
-                    # Duplicate — mark that we need another task for this combo
+                if not _try_insert_task(cursor, task_key, task_hash, ts_str):
                     if combo_saved[combo_idx] < combo_targets[combo_idx]:
-                        combo_remaining[combo_idx] += 1  # Will be fed by feed_work_queue()
-                        remaining = combo_targets[combo_idx] - combo_saved[combo_idx]
-                        if remaining <= 10:
-                            print(f"[Dedup] Duplicate for combo {combos[combo_idx]}, {remaining} remaining", flush=True)
+                        combo_remaining[combo_idx] += 1
                     continue
+
+                db_pending_commits += 1
+                if db_pending_commits >= db_commit_interval:
+                    conn.commit()
+                    db_pending_commits = 0
 
                 batch.append(task)
                 combo_saved[combo_idx] += 1
@@ -281,6 +282,8 @@ def generate_balanced_parallel(
             if batch:
                 store.save_batch(batch)
                 batch = []
+            if db_pending_commits > 0:
+                conn.commit()
 
     finally:
         done_event.set()
@@ -293,8 +296,9 @@ def generate_balanced_parallel(
         for w in workers:
             w.join(timeout=0)
 
-        work_queue.cancel_join_thread()
-        work_queue.close()
+        for wq in worker_queues:
+            wq.cancel_join_thread()
+            wq.close()
         result_queue.cancel_join_thread()
         result_queue.close()
 
