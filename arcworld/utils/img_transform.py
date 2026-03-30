@@ -50,10 +50,47 @@ def to_image(
         return img_array
 
 
+def _majority_vote_downscale(
+    full_grid: np.ndarray,
+    target_h: int,
+    target_w: int,
+) -> np.ndarray:
+    """Downscale a grid by majority vote.
+
+    For each output cell, picks the most frequent color value across all
+    source pixels in that cell's region.
+
+    Args:
+        full_grid: (..., H, W) grid at full resolution (int values 0-9).
+        target_h:  Target grid height.
+        target_w:  Target grid width.
+
+    Returns:
+        (..., target_h, target_w) downscaled grid.
+    """
+    *leading, src_h, src_w = full_grid.shape
+    out_shape = (*leading, target_h, target_w)
+    flat = full_grid.reshape(-1, src_h, src_w)
+    n = flat.shape[0]
+    result = np.zeros((n, target_h, target_w), dtype=np.int32)
+
+    for gy in range(target_h):
+        y0 = gy * src_h // target_h
+        y1 = (gy + 1) * src_h // target_h
+        for gx in range(target_w):
+            x0 = gx * src_w // target_w
+            x1 = (gx + 1) * src_w // target_w
+            block = flat[:, y0:y1, x0:x1].reshape(n, -1)  # (n, pixels)
+            for i in range(n):
+                counts = np.bincount(block[i], minlength=10)
+                result[i, gy, gx] = counts.argmax()
+
+    return result.reshape(out_shape)
+
+
 def to_grid(
     image: np.ndarray,
     grid_size: int | tuple[int, int] | None = None,
-    downscale_method: Literal["nearest", "bilinear"] = "nearest",
     input_format: Literal["HWC", "CHW"] = "CHW",
 ) -> np.ndarray:
     """Convert image back to cogitao grid.
@@ -66,7 +103,6 @@ def to_grid(
                Shape should be (3, H, W) or (B, 3, H, W) if input_format='CHW',
                or (H, W, 3) or (B, H, W, 3) if input_format='HWC'.
         grid_size: Optional target grid size for downscaling. If tuple, (H, W). If None, no downscaling is performed.
-        downscale_method: Method for downscaling - 'nearest' or 'bilinear'
         input_format: Input format - 'HWC' (height, width, channels) or 'CHW' (channels, height, width)
 
     Returns:
@@ -99,51 +135,25 @@ def to_grid(
             img_hwc = image
         height, width = img_hwc.shape[:2]
 
-    # Downscale if requested
-    if grid_size is not None:
-        downscale_method_pil = (
-            Image.Resampling.NEAREST
-            if downscale_method == "nearest"
-            else Image.Resampling.BILINEAR
-        )
-        # grid_size is (H, W) in numpy convention; PIL.resize expects (W, H)
-        target_h, target_w = grid_size
-        pil_size = (target_w, target_h)  # PIL convention: (width, height)
-        if batch_size is not None:
-            # Process each image in batch
-            # This is slow but PIL doesn't support batches
-            imgs_downscaled = []
-            for i in range(batch_size):
-                img_pil = Image.fromarray((img_hwc[i] * 255).astype(np.uint8))
-                img_downscaled = img_pil.resize(pil_size, downscale_method_pil)
-                imgs_downscaled.append(np.array(img_downscaled))
-            img_hwc = np.stack(imgs_downscaled).astype(np.float32) / 255.0
-            height, width = target_h, target_w
-        else:
-            img_pil = Image.fromarray((img_hwc * 255).astype(np.uint8))
-            img_downscaled = img_pil.resize(pil_size, downscale_method_pil)
-            img_hwc = np.array(img_downscaled).astype(np.float32) / 255.0
-            height, width = target_h, target_w
-
-    # Vectorized conversion: find closest color for all pixels using argmin
-    # Reshape image to (N, 3) for efficient computation
-    # where N = H*W or B*H*W
+    # Map every pixel to nearest palette color at full resolution
     pixels = img_hwc.reshape(-1, 3)
-
-    # Compute squared Euclidean distance between each pixel and each color
-    # Broadcasting: (N, 1, 3) - (1, 10, 3) = (N, 10, 3)
     distances = np.sum(
         (pixels[:, np.newaxis, :] - color_palette[np.newaxis, :, :]) ** 2, axis=2
     )
-
-    # Find the index of the closest color for each pixel using argmin
     if batch_size is not None:
-        grid = (
+        full_grid = (
             np.argmin(distances, axis=1)
             .reshape(batch_size, height, width)
             .astype(np.int32)
         )
     else:
-        grid = np.argmin(distances, axis=1).reshape(height, width).astype(np.int32)
+        full_grid = np.argmin(distances, axis=1).reshape(height, width).astype(np.int32)
+
+    # Downscale via majority vote (prefer non-white)
+    if grid_size is not None:
+        target_h, target_w = grid_size
+        grid = _majority_vote_downscale(full_grid, target_h, target_w)
+    else:
+        grid = full_grid
 
     return grid
