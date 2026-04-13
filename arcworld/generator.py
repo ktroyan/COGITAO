@@ -325,6 +325,88 @@ class Generator:
         output_grid = full_grid_sequence[-1]
         return output_grid, full_grid_sequence
 
+    def generate_grid(self) -> Optional[tuple[np.ndarray, list[Shape]]]:
+        """Generate a random input grid with positioned shapes.
+
+        Uses the config's grid size, n_shapes, and shape_compulsory_conditionals
+        to build a grid. Does NOT sample or apply any transformation.
+
+        Returns:
+            (input_grid, positioned_shapes) or None if generation fails.
+        """
+        compatible_shape_rows = self.get_compatible_shape_rows(
+            shape_conditionals_to_satisfy=self.config.shape_compulsory_conditionals,
+            shape_conditionals_not_to_satisfy=[],
+        )
+        try:
+            input_grid, positioned_shapes = self.set_up_initial_grid(
+                compatible_shape_rows=compatible_shape_rows
+            )
+            return input_grid, positioned_shapes
+        except Exception as e:
+            if self.debug_mode:
+                print(e)
+            return None
+
+    def generate_task_from_grid(
+        self,
+        input_grid: np.ndarray,
+        positioned_shapes: list[Shape],
+        transform_suite: list,
+    ) -> Optional[Task]:
+        """Apply a transformation suite to a pre-built grid and return a Task.
+
+        This enables paired generation where the same grid is reused across
+        ID and OOD splits with different transformation suites.
+
+        Args:
+            input_grid: The input grid with positioned shapes.
+            positioned_shapes: List of Shape objects positioned in the grid.
+            transform_suite: The transformation sequence to apply.
+
+        Returns:
+            A Task dict, or None if the transformation fails on this grid.
+        """
+        import copy
+
+        failed_transform_trials = 0
+        generated_pairs = []
+        for _ in range(self.config.n_examples):
+            if failed_transform_trials >= self.max_trials_for_function_combination:
+                break
+            try:
+                # Deep-copy shapes so transformations don't mutate the originals
+                shapes_copy = copy.deepcopy(positioned_shapes)
+                output_grid, full_grid_sequence = self.apply_transform_suite_to_grid_2(
+                    transform_suite, input_grid, shapes_copy
+                )
+                if output_grid is None:
+                    failed_transform_trials += 1
+                    continue
+                to_append: TaskPair = {
+                    "input": input_grid,
+                    "output": output_grid,
+                    "n_shapes": len(shapes_copy),
+                    "grid_size": input_grid.shape,
+                    "full_grid_sequence": full_grid_sequence,
+                }
+                generated_pairs.append(to_append)
+                failed_transform_trials = 0
+            except Exception as e:
+                if self.debug_mode:
+                    print(e)
+                failed_transform_trials += 1
+
+        if len(generated_pairs) == self.config.n_examples:
+            task: Task = {
+                "pairs": generated_pairs,
+                "transformation_suite": transform_suite,
+            }
+            if self.config.env_format == "image":
+                return self._transform_task_to_image(task)
+            return task
+        return None
+
     def generate_single_task(self) -> Optional[Task]:
         for _ in range(self.max_trials_for_configuration):
             transform_suite = self.sample_transform_suite()
