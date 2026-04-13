@@ -195,21 +195,15 @@ def color_analysis(
     else:
         raise TypeError("dataset must be a string, Path, or CogitaoDataset instance")
 
-    if dataset.cfg.env_format == "grid":
-        print("Grid format not supported for color analysis.")
-        return
+    is_grid = dataset.cfg.env_format == "grid"
 
-    # Build color palette (10 colors)
+    # Build color palette (10 colors) — needed for plotting and image matching
     color_palette = np.zeros((10, 3), dtype=np.float64)
     for i in range(10):
         test_grid = np.array([[i]])
         color_palette[i] = np.array(COLORMAP(NORM(test_grid)))[:, :, :3][0, 0]
 
-    color_palette_t = torch.tensor(color_palette, dtype=torch.float32)
-
-    # Optimization: move palette to GPU if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    color_palette_t = color_palette_t.to(device)
 
     # Create DataLoader
     loader = DataLoader(
@@ -220,22 +214,29 @@ def color_analysis(
 
     print("Analyzing dataset colors...")
     for batch in tqdm(loader, desc="Batches"):
-        # batch["inputs"] shape: (B, 3, H, W) or (B, H, W)
-        imgs = batch["inputs"].to(device)
-        B, C, H, W = imgs.shape
+        inputs = batch["inputs"].to(device)
 
-        # Reshape to (B*H*W, 3)
-        pixels = imgs.permute(0, 2, 3, 1).reshape(-1, 3)
-
-        # Distances to color_palette
-        # (N, 1, 3) - (1, 10, 3) -> (N, 10, 3)
-        distances = torch.sum(
-            (pixels.unsqueeze(1) - color_palette_t.unsqueeze(0)) ** 2, dim=2
-        )
-        closest_colors = torch.argmin(distances, dim=1)
-
-        counts = torch.bincount(closest_colors, minlength=10)
-        color_counts += counts.cpu().numpy()
+        if is_grid:
+            # Grid format: (B, H, W) with int values 0-9
+            grid_sizes = batch["grid_sizes"]  # (B, 2)
+            for i in range(inputs.shape[0]):
+                h, w = grid_sizes[i, 0].item(), grid_sizes[i, 1].item()
+                grid = inputs[i, :h, :w].long().reshape(-1)
+                counts = torch.bincount(grid, minlength=10)[:10]
+                color_counts += counts.cpu().numpy()
+        else:
+            # Image format: (B, 3, H, W) with float RGB values
+            color_palette_t = torch.tensor(
+                color_palette, dtype=torch.float32, device=device
+            )
+            B, C, H, W = inputs.shape
+            pixels = inputs.permute(0, 2, 3, 1).reshape(-1, 3)
+            distances = torch.sum(
+                (pixels.unsqueeze(1) - color_palette_t.unsqueeze(0)) ** 2, dim=2
+            )
+            closest_colors = torch.argmin(distances, dim=1)
+            counts = torch.bincount(closest_colors, minlength=10)
+            color_counts += counts.cpu().numpy()
 
     # Plot
     total_pixels = color_counts.sum()
