@@ -132,7 +132,8 @@ class Generator:
         shapes_to_position = []
         for i in range(n_shapes_wanted):
             random_row = int(random.choice(compatible_shape_rows))
-            shape_grid = hdf5_utils.load_shape(random_row, self.shape_file)
+            original_row = int(self.possible_shapes[random_row])
+            shape_grid = hdf5_utils.load_shape(original_row, self.shape_file)
             shapes_to_position.append(Shape(shape_grid))
         return shapes_to_position
 
