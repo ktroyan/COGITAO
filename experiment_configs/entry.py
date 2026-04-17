@@ -23,3 +23,4 @@ class ExperimentEntry:
     experiment: int
     split: str  # "train" or "test"
     subdir: str | None = None
+    paired_splits: bool = False  # When True, val/test ID and OOD share the same input grids

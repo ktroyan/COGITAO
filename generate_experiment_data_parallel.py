@@ -119,6 +119,111 @@ def _balanced_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_
 
 
 # ---------------------------------------------------------------------------
+# Paired worker (shared-grid ID/OOD generation)
+# ---------------------------------------------------------------------------
+
+def _paired_worker(worker_id, work_queue, result_queue, dataset_cfg, shutdown_event, done_event):
+    """Worker for paired generation: generates a grid then applies both ID and OOD transforms.
+
+    Work items are (id_combo_idx, id_combo, ood_combo_idx, ood_combo).
+    Results are (id_task, ood_task, id_combo_idx, ood_combo_idx).
+    """
+    import copy as _copy
+
+    gen_cache: dict[tuple, Generator] = {}
+    failures = 0
+    max_consecutive_failures = 50
+    empty_streak = 0
+
+    # Build a single Generator for grid generation (uses dataset_cfg directly)
+    grid_gen_key = ("__grid_gen__",)
+    cfg_copy = dataset_cfg.model_copy()
+    # Keep allowed_combinations from the ID side for config validity — we won't use sample_transform_suite
+    gen_cache[grid_gen_key] = Generator(cfg_copy)
+
+    while not shutdown_event.is_set():
+        if done_event.is_set():
+            break
+
+        try:
+            item = work_queue.get(timeout=1)
+        except QueueEmpty:
+            empty_streak += 1
+            if empty_streak >= 3 and done_event.is_set():
+                break
+            continue
+        except KeyboardInterrupt:
+            break
+
+        empty_streak = 0
+
+        if item is None:
+            break
+
+        id_combo_idx, id_combo, ood_combo_idx, ood_combo = item
+
+        grid_gen = gen_cache[grid_gen_key]
+
+        # Generate a grid
+        grid_result = grid_gen.generate_grid()
+        if grid_result is None:
+            failures += 1
+            if failures >= max_consecutive_failures:
+                logger.error(f"Worker {worker_id}: {max_consecutive_failures} consecutive failures. Dropping item.")
+                continue
+            try:
+                work_queue.put(item)
+            except QueueFull:
+                pass
+            continue
+
+        input_grid, positioned_shapes = grid_result
+
+        # Try ID transform
+        id_task = grid_gen.generate_task_from_grid(input_grid, positioned_shapes, list(id_combo))
+        if id_task is None:
+            failures += 1
+            if failures >= max_consecutive_failures:
+                logger.error(f"Worker {worker_id}: {max_consecutive_failures} failures on ID combo {id_combo}. Dropping.")
+                continue
+            try:
+                work_queue.put(item)
+            except QueueFull:
+                pass
+            continue
+
+        # Try OOD transform on the same grid
+        ood_task = grid_gen.generate_task_from_grid(input_grid, positioned_shapes, list(ood_combo))
+        if ood_task is None:
+            failures += 1
+            if failures >= max_consecutive_failures:
+                logger.error(f"Worker {worker_id}: {max_consecutive_failures} failures on OOD combo {ood_combo}. Dropping.")
+                continue
+            try:
+                work_queue.put(item)
+            except QueueFull:
+                pass
+            continue
+
+        failures = 0
+        try:
+            result_queue.put((id_task, ood_task, id_combo_idx, ood_combo_idx), timeout=5)
+        except QueueFull:
+            try:
+                work_queue.put(item)
+            except QueueFull:
+                pass
+            continue
+
+    # Cleanup
+    for gen in gen_cache.values():
+        if hasattr(gen, 'shape_file'):
+            gen.shape_file.close()
+    gen_cache.clear()
+    result_queue.cancel_join_thread()
+
+
+# ---------------------------------------------------------------------------
 # Hashing
 # ---------------------------------------------------------------------------
 
@@ -313,6 +418,233 @@ def generate_balanced_parallel(
 
 
 # ---------------------------------------------------------------------------
+# Paired generation (shared-grid ID/OOD)
+# ---------------------------------------------------------------------------
+
+def generate_paired_balanced_parallel(
+    id_cfg: DatasetConfig,
+    ood_cfg: DatasetConfig,
+    id_output_path: Path,
+    ood_output_path: Path,
+    n_tasks: int,
+    num_workers: int,
+    db_name: str,
+    db_path: Path,
+):
+    """Generate paired ID/OOD HDF5 datasets sharing the same input grids.
+
+    For each sample, the same grid is used with an ID transform and an OOD
+    transform. Both must succeed and pass dedup for the pair to be kept,
+    ensuring strict 1-to-1 alignment between the two output files.
+
+    Balance is maintained across transformation combos on both sides.
+    """
+    id_combos = id_cfg.allowed_combinations
+    ood_combos = ood_cfg.allowed_combinations
+    if not id_combos or not ood_combos:
+        raise ValueError("Both id_cfg and ood_cfg must have non-empty allowed_combinations")
+
+    n_id_combos = len(id_combos)
+    n_ood_combos = len(ood_combos)
+    n_per_id = n_tasks // n_id_combos
+    n_per_ood = n_tasks // n_ood_combos
+    id_remainder = n_tasks % n_id_combos
+    ood_remainder = n_tasks % n_ood_combos
+
+    id_targets = {i: n_per_id + (1 if i < id_remainder else 0) for i in range(n_id_combos)}
+    ood_targets = {i: n_per_ood + (1 if i < ood_remainder else 0) for i in range(n_ood_combos)}
+
+    logger.info(
+        f"Paired generation: {n_tasks} tasks "
+        f"({n_id_combos} ID combos, {n_ood_combos} OOD combos) "
+        f"→ {id_output_path}, {ood_output_path}"
+    )
+
+    result_queue = mp.Queue(maxsize=num_workers * 16)
+    shutdown_event = mp.Event()
+    done_event = mp.Event()
+
+    # Create HDF5 stores
+    id_output_path.parent.mkdir(parents=True, exist_ok=True)
+    ood_output_path.parent.mkdir(parents=True, exist_ok=True)
+    id_store = HDF5CogitaoStore(path=id_output_path, cfg=id_cfg)
+    ood_store = HDF5CogitaoStore(path=ood_output_path, cfg=ood_cfg)
+
+    # Open dedup DB
+    db_path.mkdir(parents=True, exist_ok=True)
+    cursor, conn = access_db(db_name, str(db_path))
+
+    # Create per-worker queues
+    effective_workers = min(num_workers, n_tasks)
+    worker_queues: list[mp.Queue] = [mp.Queue(maxsize=64) for _ in range(effective_workers)]
+
+    # Start workers — all use the ID config for grid generation
+    workers = []
+    for i in range(effective_workers):
+        p = mp.Process(
+            target=_paired_worker,
+            args=(i, worker_queues[i], result_queue, id_cfg, shutdown_event, done_event),
+        )
+        p.start()
+        workers.append(p)
+
+    # Main loop: collect, dedup, write
+    save_batch_size = max(effective_workers * 8, 1)
+    db_commit_interval = save_batch_size
+    db_pending_commits = 0
+    id_batch = []
+    ood_batch = []
+    total_saved = 0
+    id_saved = {i: 0 for i in range(n_id_combos)}
+    ood_saved = {i: 0 for i in range(n_ood_combos)}
+
+    # Track remaining work to enqueue per combo pair
+    id_remaining = {i: id_targets[i] for i in range(n_id_combos)}
+    ood_remaining = {i: ood_targets[i] for i in range(n_ood_combos)}
+
+    def _next_needed_combo(remaining_dict):
+        """Return the combo index with the most remaining quota, or None if all done."""
+        best = None
+        best_rem = 0
+        for idx, rem in remaining_dict.items():
+            if rem > best_rem:
+                best = idx
+                best_rem = rem
+        return best
+
+    def feed_work_queues():
+        """Feed paired work items into worker queues (round-robin across workers)."""
+        id_idx = _next_needed_combo(id_remaining)
+        ood_idx = _next_needed_combo(ood_remaining)
+        if id_idx is None or ood_idx is None:
+            return
+        for wid in range(effective_workers):
+            # Recompute each iteration since remaining changes
+            id_idx = _next_needed_combo(id_remaining)
+            ood_idx = _next_needed_combo(ood_remaining)
+            if id_idx is None or ood_idx is None:
+                return
+            try:
+                worker_queues[wid].put_nowait(
+                    (id_idx, id_combos[id_idx], ood_idx, ood_combos[ood_idx])
+                )
+                id_remaining[id_idx] -= 1
+                ood_remaining[ood_idx] -= 1
+            except QueueFull:
+                pass
+
+    def _try_insert_task(cursor, task_key, task_hash, ts_str):
+        try:
+            cursor.execute(
+                "INSERT INTO tasks (task_key, task_hash, transformations) VALUES (?, ?, ?)",
+                (task_key, task_hash, ts_str),
+            )
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    # Initial feed
+    feed_work_queues()
+
+    try:
+        with tqdm(total=n_tasks, desc=f"Paired gen {id_output_path.stem}+{ood_output_path.stem}") as pbar:
+            while total_saved < n_tasks:
+                feed_work_queues()
+
+                alive = sum(1 for w in workers if w.is_alive())
+                if alive == 0 and result_queue.empty():
+                    logger.error("All workers died and queue is empty.")
+                    break
+
+                try:
+                    id_task, ood_task, id_combo_idx, ood_combo_idx = result_queue.get(timeout=10)
+                except QueueEmpty:
+                    continue
+                except KeyboardInterrupt:
+                    break
+
+                # Dedup both tasks — if either is a duplicate, discard the pair
+                id_hash = hash_task_raw(id_task)
+                id_key = generate_key()
+                id_ts_str = str(id_task["transformation_suite"])
+
+                ood_hash = hash_task_raw(ood_task)
+                ood_key = generate_key()
+                ood_ts_str = str(ood_task["transformation_suite"])
+
+                if not _try_insert_task(cursor, id_key, id_hash, id_ts_str):
+                    # Re-enqueue both combo slots
+                    if id_saved[id_combo_idx] < id_targets[id_combo_idx]:
+                        id_remaining[id_combo_idx] += 1
+                    if ood_saved[ood_combo_idx] < ood_targets[ood_combo_idx]:
+                        ood_remaining[ood_combo_idx] += 1
+                    continue
+
+                if not _try_insert_task(cursor, ood_key, ood_hash, ood_ts_str):
+                    if id_saved[id_combo_idx] < id_targets[id_combo_idx]:
+                        id_remaining[id_combo_idx] += 1
+                    if ood_saved[ood_combo_idx] < ood_targets[ood_combo_idx]:
+                        ood_remaining[ood_combo_idx] += 1
+                    continue
+
+                db_pending_commits += 1
+                if db_pending_commits >= db_commit_interval:
+                    conn.commit()
+                    db_pending_commits = 0
+
+                id_batch.append(id_task)
+                ood_batch.append(ood_task)
+                id_saved[id_combo_idx] += 1
+                ood_saved[ood_combo_idx] += 1
+                total_saved += 1
+                pbar.update(1)
+
+                if len(id_batch) >= save_batch_size:
+                    id_store.save_batch(id_batch)
+                    ood_store.save_batch(ood_batch)
+                    id_batch = []
+                    ood_batch = []
+
+            # Flush remaining
+            if id_batch:
+                id_store.save_batch(id_batch)
+                ood_store.save_batch(ood_batch)
+                id_batch = []
+                ood_batch = []
+            if db_pending_commits > 0:
+                conn.commit()
+
+    finally:
+        done_event.set()
+        shutdown_event.set()
+        time.sleep(1)
+        for w in workers:
+            if w.is_alive():
+                w.terminate()
+        time.sleep(2)
+        for w in workers:
+            w.join(timeout=0)
+
+        for wq in worker_queues:
+            wq.cancel_join_thread()
+            wq.close()
+        result_queue.cancel_join_thread()
+        result_queue.close()
+
+        del id_store
+        del ood_store
+        close_db(conn)
+
+    logger.info(f"Done: {total_saved} paired tasks saved")
+    for i in range(n_id_combos):
+        logger.info(f"  ID combo {id_combos[i]}: {id_saved[i]}/{id_targets[i]}")
+    for i in range(n_ood_combos):
+        logger.info(f"  OOD combo {ood_combos[i]}: {ood_saved[i]}/{ood_targets[i]}")
+
+    return total_saved
+
+
+# ---------------------------------------------------------------------------
 # Path helpers
 # ---------------------------------------------------------------------------
 
@@ -337,6 +669,17 @@ def build_db_name(study_name: str, entry: ExperimentEntry) -> str:
 # Split expansion
 # ---------------------------------------------------------------------------
 
+def _find_ood_entry(entries: list[ExperimentEntry], train_entry: ExperimentEntry) -> ExperimentEntry | None:
+    """Find the matching OOD (split='test') entry for a given train entry."""
+    for e in entries:
+        if (e.split == "test"
+                and e.setting == train_entry.setting
+                and e.experiment == train_entry.experiment
+                and e.subdir == train_entry.subdir):
+            return e
+    return None
+
+
 def run_study(
     study_name: str,
     entries: list[ExperimentEntry],
@@ -346,14 +689,80 @@ def run_study(
     n_val: int,
     n_test: int,
 ):
-    """Run generation for all entries in a study, expanding splits."""
+    """Run generation for all entries in a study, expanding splits.
+
+    When a train entry has paired_splits=True, val/test ID and OOD splits
+    are generated with shared input grids (paired mode). The matching OOD
+    entry (same setting/experiment, split='test') is looked up automatically
+    and does not need to be processed separately.
+    """
     time_log: dict[str, float] = {}
 
+    # Track which test entries are consumed by paired generation so we don't
+    # process them independently as well.
+    paired_ood_keys: set[tuple] = set()
+
+    for entry in entries:
+        if entry.split == "train" and entry.paired_splits:
+            ood_entry = _find_ood_entry(entries, entry)
+            if ood_entry is None:
+                logger.error(
+                    f"paired_splits=True but no matching test entry for "
+                    f"setting={entry.setting} exp={entry.experiment}. "
+                    f"Falling back to independent generation."
+                )
+                # Fall through to normal train handling below
+            else:
+                paired_ood_keys.add((ood_entry.setting, ood_entry.experiment, ood_entry.subdir))
+
+                db_name = build_db_name(study_name, entry)
+                db_path = build_output_path(output_dir, study_name, entry, "db").parent
+
+                # 1. Generate train independently (as before)
+                train_path = build_output_path(output_dir, study_name, entry, "train")
+                if train_path.exists():
+                    logger.info(f"Skipping {train_path} (already exists)")
+                else:
+                    start = time.time()
+                    generate_balanced_parallel(entry.cfg, train_path, n_train, num_workers, db_name, db_path)
+                    time_log[str(train_path)] = time.time() - start
+
+                # 2. Generate val + val_ood paired
+                val_id_path = build_output_path(output_dir, study_name, entry, "val")
+                val_ood_path = build_output_path(output_dir, study_name, entry, "val_ood")
+                if val_id_path.exists() and val_ood_path.exists():
+                    logger.info(f"Skipping paired val (both exist)")
+                else:
+                    start = time.time()
+                    generate_paired_balanced_parallel(
+                        entry.cfg, ood_entry.cfg,
+                        val_id_path, val_ood_path,
+                        n_val, num_workers, db_name, db_path,
+                    )
+                    time_log[f"{val_id_path}+{val_ood_path}"] = time.time() - start
+
+                # 3. Generate test + test_ood paired
+                test_id_path = build_output_path(output_dir, study_name, entry, "test")
+                test_ood_path = build_output_path(output_dir, study_name, entry, "test_ood")
+                if test_id_path.exists() and test_ood_path.exists():
+                    logger.info(f"Skipping paired test (both exist)")
+                else:
+                    start = time.time()
+                    generate_paired_balanced_parallel(
+                        entry.cfg, ood_entry.cfg,
+                        test_id_path, test_ood_path,
+                        n_test, num_workers, db_name, db_path,
+                    )
+                    time_log[f"{test_id_path}+{test_ood_path}"] = time.time() - start
+
+                continue  # Skip normal train handling
+
+    # Second pass: process entries not handled by paired generation
     for entry in entries:
         db_name = build_db_name(study_name, entry)
         db_path = build_output_path(output_dir, study_name, entry, "db").parent
 
-        if entry.split == "train":
+        if entry.split == "train" and not entry.paired_splits:
             # Generate train, val, test (in-distribution) — all sharing the same dedup DB
             for split_name, n in [("train", n_train), ("val", n_val), ("test", n_test)]:
                 path = build_output_path(output_dir, study_name, entry, split_name)
@@ -365,7 +774,16 @@ def run_study(
                 time_log[str(path)] = time.time() - start
 
         elif entry.split == "test":
-            # Generate val_ood, test_ood
+            # Skip if already consumed by paired generation
+            key = (entry.setting, entry.experiment, entry.subdir)
+            if key in paired_ood_keys:
+                logger.info(
+                    f"Skipping test entry setting={entry.setting} exp={entry.experiment} "
+                    f"(handled by paired generation)"
+                )
+                continue
+
+            # Generate val_ood, test_ood independently
             for split_name, n in [("val_ood", n_val), ("test_ood", n_test)]:
                 path = build_output_path(output_dir, study_name, entry, split_name)
                 if path.exists():
@@ -375,7 +793,7 @@ def run_study(
                 generate_balanced_parallel(entry.cfg, path, n, num_workers, db_name, db_path)
                 time_log[str(path)] = time.time() - start
 
-        else:
+        elif entry.split != "train":
             logger.warning(f"Unknown split role '{entry.split}' for setting={entry.setting} exp={entry.experiment}")
 
     # Log timing

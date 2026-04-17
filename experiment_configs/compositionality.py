@@ -14,14 +14,14 @@ _BASE = dict(
 )
 
 
-def make_entry(combos, setting, exp_number, split, min_size=15, max_size=15):
+def make_entry(combos, setting, exp_number, split, min_size=15, max_size=15, paired_splits=False):
     cfg = DatasetConfig(
         **_BASE,
         allowed_combinations=combos,
         min_grid_size=min_size,
         max_grid_size=max_size,
     )
-    return ExperimentEntry(cfg=cfg, setting=setting, experiment=exp_number, split=split)
+    return ExperimentEntry(cfg=cfg, setting=setting, experiment=exp_number, split=split, paired_splits=paired_splits)
 
 
 compositionality_configs: list[ExperimentEntry] = []
@@ -36,7 +36,7 @@ compositionality_configs.append(make_entry(
      ["translate_up", "mirror_horizontal"],
      ["rot90", "mirror_horizontal"],
      ["mirror_horizontal", "rot90"]],
-    1, 1, "train"))
+    1, 1, "train", paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["translate_up", "rot90"], ["rot90", "translate_up"]],
@@ -52,7 +52,7 @@ compositionality_configs.append(make_entry(
      ["fill_holes_different_color", "change_shape_color"],
      ["change_shape_color", "fill_holes_different_color"],
      ["change_shape_color", "pad_right"]],
-    1, 2, "train"))
+    1, 2, "train", paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["pad_right", "change_shape_color"], ["change_shape_color", "pad_right"]],
@@ -67,7 +67,7 @@ compositionality_configs.append(make_entry(
      ["rot90", "pad_top"],
      ["pad_top", "crop_bottom_side"],
      ["crop_bottom_side", "rot90"]],
-    1, 3, "train"))
+    1, 3, "train", paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["rot90", "crop_bottom_side"], ["crop_bottom_side", "rot90"]],
@@ -82,7 +82,7 @@ compositionality_configs.append(make_entry(
      ["double_right", "change_shape_color"],
      ["crop_contours", "change_shape_color"],
      ["change_shape_color", "double_right"]],
-    1, 4, "train"))
+    1, 4, "train", paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["double_right", "crop_contours"], ["crop_contours", "double_right"]],
@@ -97,7 +97,7 @@ compositionality_configs.append(make_entry(
      ["mirror_vertical", "pad_left"],
      ["extend_contours_same_color", "pad_left"],
      ["extend_contours_same_color", "mirror_vertical"]],
-    1, 5, "train"))
+    1, 5, "train", paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["pad_left", "extend_contours_same_color"], ["extend_contours_same_color", "pad_left"]],
@@ -113,7 +113,7 @@ compositionality_configs.append(make_entry(
      ["translate_up", "mirror_horizontal"],
      ["rot90", "mirror_horizontal"],
      ["mirror_horizontal", "rot90"]],
-    2, 1, "train"))
+    2, 1, "train", paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["translate_up", "rot90"], ["rot90", "translate_up"]],
@@ -128,7 +128,7 @@ compositionality_configs.append(make_entry(
      ["fill_holes_different_color", "change_shape_color"],
      ["change_shape_color", "fill_holes_different_color"],
      ["change_shape_color", "pad_right"]],
-    2, 2, "train"))
+    2, 2, "train", paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["pad_right", "change_shape_color"], ["change_shape_color", "pad_right"]],
@@ -142,7 +142,7 @@ compositionality_configs.append(make_entry(
      ["rot90", "pad_top"],
      ["pad_top", "crop_bottom_side"],
      ["crop_bottom_side", "rot90"]],
-    2, 3, "train"))
+    2, 3, "train", paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["rot90", "crop_bottom_side"], ["crop_bottom_side", "rot90"]],
@@ -156,7 +156,7 @@ compositionality_configs.append(make_entry(
      ["double_right", "change_shape_color"],
      ["crop_contours", "change_shape_color"],
      ["change_shape_color", "double_right"]],
-    2, 4, "train"))
+    2, 4, "train", paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["double_right", "crop_contours"], ["crop_contours", "double_right"]],
@@ -170,7 +170,7 @@ compositionality_configs.append(make_entry(
      ["mirror_vertical", "pad_left"],
      ["extend_contours_same_color", "pad_left"],
      ["extend_contours_same_color", "mirror_vertical"]],
-    2, 5, "train"))
+    2, 5, "train", paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["pad_left", "extend_contours_same_color"], ["extend_contours_same_color", "pad_left"]],
@@ -184,7 +184,7 @@ compositionality_configs.append(make_entry(
      ["translate_up", "translate_up"], ["mirror_horizontal", "mirror_horizontal"], ["rot90", "rot90"],
      ["translate_up", "mirror_horizontal"], ["translate_up", "rot90"],
      ["mirror_horizontal", "rot90"]],
-    3, 1, "train", 20, 20))
+    3, 1, "train", 20, 20, paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["translate_up", "translate_up", "translate_up"],
@@ -211,7 +211,7 @@ compositionality_configs.append(make_entry(
      ["pad_right", "pad_right"], ["fill_holes_different_color", "fill_holes_different_color"], ["change_shape_color", "change_shape_color"],
      ["pad_right", "fill_holes_different_color"], ["pad_right", "change_shape_color"],
      ["fill_holes_different_color", "change_shape_color"]],
-    3, 2, "train", 20, 20))
+    3, 2, "train", 20, 20, paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["pad_right", "pad_right", "pad_right"],
@@ -238,7 +238,7 @@ compositionality_configs.append(make_entry(
      ["rot90", "rot90"], ["pad_top", "pad_top"], ["crop_bottom_side", "crop_bottom_side"],
      ["rot90", "pad_top"], ["rot90", "crop_bottom_side"],
      ["pad_top", "crop_bottom_side"]],
-    3, 3, "train", 20, 20))
+    3, 3, "train", 20, 20, paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["rot90", "rot90", "rot90"],
@@ -266,7 +266,7 @@ compositionality_configs.append(make_entry(
      ["change_shape_color", "change_shape_color"],
      ["double_right", "crop_contours"], ["double_right", "change_shape_color"],
      ["crop_contours", "change_shape_color"]],
-    3, 4, "train", 20, 20))
+    3, 4, "train", 20, 20, paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["double_right", "double_right", "crop_contours"],
@@ -291,7 +291,7 @@ compositionality_configs.append(make_entry(
      ["extend_contours_same_color", "extend_contours_same_color"], ["pad_left", "pad_left"], ["mirror_vertical", "mirror_vertical"],
      ["extend_contours_same_color", "pad_left"], ["extend_contours_same_color", "mirror_vertical"],
      ["pad_left", "mirror_vertical"]],
-    3, 5, "train", 20, 20))
+    3, 5, "train", 20, 20, paired_splits=True))
 
 compositionality_configs.append(make_entry(
     [["extend_contours_same_color", "extend_contours_same_color", "extend_contours_same_color"],

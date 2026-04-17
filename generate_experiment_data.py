@@ -77,6 +77,123 @@ def generate_equal_balance_from_transforms(config, n_tasks_to_generate):
         json.dump(task_list, f)
 
 
+def generate_paired_splits(id_config, ood_config, n_tasks_to_generate, id_file_path, ood_file_path):
+    """Generate paired ID/OOD splits sharing the same input grids.
+
+    For each sample, the same input grid is used with an ID transformation and
+    an OOD transformation. Both must succeed for the pair to be kept, ensuring
+    strict 1-to-1 alignment between the two output files.
+
+    Balance is maintained across transformation combos on both sides.
+    """
+    db_name, folder_path, _ = handle_paths(id_config)
+
+    cursor, conn = access_db(db_name, folder_path)
+
+    id_combos = id_config["allowed_combinations"]
+    ood_combos = ood_config["allowed_combinations"]
+    n_per_id = n_tasks_to_generate // len(id_combos)
+    id_remainder = n_tasks_to_generate % len(id_combos)
+    n_per_ood = n_tasks_to_generate // len(ood_combos)
+    ood_remainder = n_tasks_to_generate % len(ood_combos)
+
+    # Per-combo targets (first `remainder` combos get +1)
+    id_combo_targets = {i: n_per_id + (1 if i < id_remainder else 0) for i in range(len(id_combos))}
+    ood_combo_targets = {i: n_per_ood + (1 if i < ood_remainder else 0) for i in range(len(ood_combos))}
+
+    # Use id_config for grid generation (grid size, shapes, etc.)
+    grid_gen_config = copy.deepcopy(id_config)
+    grid_gen_config["allowed_combinations"] = id_combos
+    grid_gen = Generator(grid_gen_config)
+
+    id_task_list = []
+    ood_task_list = []
+
+    # Track per-combo counts for balance
+    id_combo_counts = {i: 0 for i in range(len(id_combos))}
+    ood_combo_counts = {i: 0 for i in range(len(ood_combos))}
+
+    max_failures = 100
+    consecutive_failures = 0
+
+    while len(id_task_list) < n_tasks_to_generate:
+        # Pick the ID combo furthest below its target
+        id_combo_idx = max(id_combo_targets, key=lambda i: id_combo_targets[i] - id_combo_counts[i])
+        if id_combo_counts[id_combo_idx] >= id_combo_targets[id_combo_idx]:
+            break  # All ID combos are full
+        id_combo = id_combos[id_combo_idx]
+
+        # Pick the OOD combo furthest below its target
+        ood_combo_idx = max(ood_combo_targets, key=lambda i: ood_combo_targets[i] - ood_combo_counts[i])
+        if ood_combo_counts[ood_combo_idx] >= ood_combo_targets[ood_combo_idx]:
+            break  # All OOD combos are full
+        ood_combo = ood_combos[ood_combo_idx]
+
+        # Generate a grid
+        grid_result = grid_gen.generate_grid()
+        if grid_result is None:
+            consecutive_failures += 1
+            if consecutive_failures >= max_failures:
+                print(f"Too many consecutive grid generation failures ({max_failures}). Stopping.")
+                break
+            continue
+
+        input_grid, positioned_shapes = grid_result
+
+        # Try ID transform on this grid
+        id_task = grid_gen.generate_task_from_grid(input_grid, positioned_shapes, id_combo)
+        if id_task is None:
+            consecutive_failures += 1
+            if consecutive_failures >= max_failures:
+                print(f"Too many consecutive failures ({max_failures}). Stopping.")
+                break
+            continue
+
+        # Try OOD transform on the same grid
+        ood_task = grid_gen.generate_task_from_grid(input_grid, positioned_shapes, ood_combo)
+        if ood_task is None:
+            consecutive_failures += 1
+            if consecutive_failures >= max_failures:
+                print(f"Too many consecutive failures ({max_failures}). Stopping.")
+                break
+            continue
+
+        consecutive_failures = 0
+
+        # Dedup both tasks
+        id_task_key = generate_key()
+        id_ready = adapt_task_format(id_task, id_task_key)
+        id_hash = hash_task(id_ready["input"], id_ready["transformation_suite"])
+
+        ood_task_key = generate_key()
+        ood_ready = adapt_task_format(ood_task, ood_task_key)
+        ood_hash = hash_task(ood_ready["input"], ood_ready["transformation_suite"])
+
+        # Both must be unique to keep the pair
+        id_ok = store_task_in_db(cursor, conn, id_task_key, id_hash,
+                                  str(id_ready['transformation_suite']), debug=False)
+        if not id_ok:
+            continue
+
+        ood_ok = store_task_in_db(cursor, conn, ood_task_key, ood_hash,
+                                   str(ood_ready['transformation_suite']), debug=False)
+        if not ood_ok:
+            continue
+
+        id_task_list.append(id_ready)
+        ood_task_list.append(ood_ready)
+        id_combo_counts[id_combo_idx] += 1
+        ood_combo_counts[ood_combo_idx] += 1
+        print(f"Generated {len(id_task_list)} / {n_tasks_to_generate} paired tasks", end='\r')
+
+    close_db(conn)
+
+    with open(f"{id_file_path}", "w") as f:
+        json.dump(id_task_list, f)
+    with open(f"{ood_file_path}", "w") as f:
+        json.dump(ood_task_list, f)
+
+
 if __name__ == "__main__":
     
     
