@@ -91,13 +91,13 @@ ood_transformations_setting_1_exp_2 = [
 
 
 # Define the experiments' datasets
-compgen_basics_ktroyan_experiments: list[ExperimentEntry] = []
+compgen_basics_experiments: list[ExperimentEntry] = []
 
 # ------------------------------
 # Basic Setting 1, Experiment 1
 # ------------------------------
 # ID splits
-compgen_basics_ktroyan_experiments.append(
+compgen_basics_experiments.append(
     ExperimentEntry(
         cfg=_base_cfg(n_examples=1, transformations=id_transformations_setting_1_exp_1),
         setting=1,
@@ -107,7 +107,7 @@ compgen_basics_ktroyan_experiments.append(
 )
 
 # OOD splits
-compgen_basics_ktroyan_experiments.append(
+compgen_basics_experiments.append(
     ExperimentEntry(
         cfg=_base_cfg(n_examples=1, transformations=ood_transformations_setting_1_exp_1),
         setting=1,
@@ -120,7 +120,7 @@ compgen_basics_ktroyan_experiments.append(
 # Basic Setting 1, Experiment 2
 # ------------------------------
 # ID splits
-compgen_basics_ktroyan_experiments.append(
+compgen_basics_experiments.append(
     ExperimentEntry(
         cfg=_base_cfg(n_examples=1, transformations=id_transformations_setting_1_exp_2),
         setting=1,
@@ -130,7 +130,7 @@ compgen_basics_ktroyan_experiments.append(
 )
 
 # OOD splits
-compgen_basics_ktroyan_experiments.append(
+compgen_basics_experiments.append(
     ExperimentEntry(
         cfg=_base_cfg(n_examples=1, transformations=ood_transformations_setting_1_exp_2),
         setting=1,

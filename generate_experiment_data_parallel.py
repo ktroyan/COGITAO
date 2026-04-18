@@ -821,8 +821,8 @@ def _load_studies():
     from experiment_configs.compositionality_gridsize import compositionality_gridsize_config
     from experiment_configs.generalization import generalization_configs
     from experiment_configs.sample_efficiency import sample_efficiency_configs
-    from experiment_configs.compgen_ktroyan import compgen_ktroyan_experiments
-    from experiment_configs.compgen_basics_ktroyan import compgen_basics_ktroyan_experiments
+    from experiment_configs.compgen import compgen_experiments_s1, compgen_experiments_s2
+    from experiment_configs.compgen_basics import compgen_basics_experiments
 
     STUDIES["c0"] = c0_configs
     STUDIES["compositionality"] = compositionality_configs
@@ -830,8 +830,9 @@ def _load_studies():
     STUDIES["sample_efficiency"] = sample_efficiency_configs
     STUDIES["compositionality_gridsize"] = compositionality_gridsize_config
     STUDIES["c4"] = c4_configs
-    STUDIES["compgen_ktroyan_experiments"] = compgen_ktroyan_experiments
-    STUDIES["compgen_basics_ktroyan_experiments"] = compgen_basics_ktroyan_experiments
+    STUDIES["compgen_experiments_s1"] = compgen_experiments_s1
+    STUDIES["compgen_experiments_s2"] = compgen_experiments_s2
+    STUDIES["compgen_basics_experiments"] = compgen_basics_experiments
 
 
 # ---------------------------------------------------------------------------
@@ -841,7 +842,7 @@ def _load_studies():
 def main():
     parser = argparse.ArgumentParser(description="Generate balanced experiment datasets in parallel.")
     parser.add_argument("--study", type=str, required=True,
-                        help="Study name (c0, compositionality, generalization, sample_efficiency, compositionality_gridsize, c4, compgen_ktroyan_experiments, compgen_basics_ktroyan_experiments) or 'all'.")
+                        help="Study name (c0, compositionality, generalization, sample_efficiency, compositionality_gridsize, c4, compgen_experiments_s1, compgen_experiments_s2, compgen_basics_experiments) or 'all'.")
     parser.add_argument("--study_name_suffix", type=str, default="",
                         help="Optional suffix to append to study name right after the study config was loaded. This allows to use only one config file for several generations.")
     parser.add_argument("--output-dir", type=str, default="./data",
