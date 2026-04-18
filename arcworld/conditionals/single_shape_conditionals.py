@@ -34,6 +34,15 @@ def mirror_vertical(shape):
     mirrored.move_to_position(position)
     return mirrored
 
+def is_shape_rectangular(shape):
+    """True if every cell in the bounding box is filled (non-zero), regardless of coloring.
+    This includes both squares and non-square rectangles."""
+    return np.all(shape.as_shape_only_grid != 0)
+
+def is_shape_rectangular_not_square(shape):
+    """Rectangular footprint (fully filled) with unequal dimensions."""
+    return is_shape_rectangular(shape) and shape.n_rows != shape.n_cols
+
 
 def is_shape_vertically_symmetric(shape):
     new_shape = mirror_vertical(shape)
@@ -202,6 +211,8 @@ def is_shape_wider_than_high(shape):
 def is_shape_same_height_width(shape):
     return shape.n_rows == shape.n_cols
 
+def is_shape_not_same_height_width(shape):
+    return not is_shape_same_height_width(shape)
 
 def is_shape_of_two_cols(shape):
     return shape.n_cols == 2
@@ -347,6 +358,54 @@ def is_shape_less_than_9_cols(shape):
     return shape.n_cols < 9
 
 
+def is_shape_cross(shape):
+    """True if shape forms a cross/plus — one horizontal and one vertical stripe 
+    intersecting at center, all cells filled."""
+    grid = (shape.as_shape_only_grid != 0).astype(int)
+    rows, cols = grid.shape
+    if rows < 3 or cols < 3:
+        return False
+    # Find the single fully-filled row and column
+    full_rows = [i for i in range(rows) if np.all(grid[i] == 1)]
+    full_cols = [j for j in range(cols) if np.all(grid[:, j] == 1)]
+    if len(full_rows) != 1 or len(full_cols) != 1:
+        return False
+    # Every filled cell must be in the full row or full column
+    for i in range(rows):
+        for j in range(cols):
+            in_cross = (i in full_rows) or (j in full_cols)
+            if grid[i, j] == 1 and not in_cross:
+                return False
+            if grid[i, j] == 0 and in_cross:
+                return False
+    return True
+
+def is_shape_diamond(shape):
+    """True if shape is a solid diamond (all filled cells form a diamond/rhombus pattern)."""
+    grid = shape.as_shape_only_grid
+    rows, cols = grid.shape
+    # A diamond of radius r has shape (2r+1, 2r+1) and each row i
+    # has exactly (r - |i - r|)*2 + 1 filled cells, centered
+    if rows != cols or rows % 2 == 0:
+        return False
+    r = rows // 2
+    for i in range(rows):
+        expected = 2 * (r - abs(i - r)) + 1
+        actual = np.count_nonzero(grid[i])
+        if actual != expected:
+            return False
+        # Also verify the filled cells are centered (not scattered)
+        nonzero = np.nonzero(grid[i])[0]
+        if len(nonzero) > 0 and (nonzero[-1] - nonzero[0] + 1) != expected:
+            return False
+    return True
+
+def is_shape_cross_or_rectangle_or_diamond(shape):
+    return is_shape_cross(shape) or is_shape_rectangular(shape) or is_shape_diamond(shape)
+
+def is_shape_cross_or_rectangle(shape):
+    return is_shape_rectangular(shape) or is_shape_cross(shape)
+
 ########################################################## CONDITIONAL DICT WITH ALL FUNCTION POINTERS ######################################################
 
 ConditionalType = Literal[
@@ -379,6 +438,11 @@ ConditionalType = Literal[
     "is_shape_not_fully_connected",
     "is_shape_higher_than_wide",
     "is_shape_wider_than_high",
+    "is_shape_not_same_height_width",
+    "is_shape_cross",
+    "is_shape_cross_or_rectangle",
+    "is_shape_diamond",
+    "is_shape_cross_or_rectangle_or_diamond",
     "is_shape_same_height_width",
     "is_shape_of_two_cols",
     "is_shape_of_three_cols",
@@ -416,6 +480,8 @@ ConditionalType = Literal[
     "is_shape_less_than_11_cols",
     "is_shape_less_than_9_rows",
     "is_shape_less_than_9_cols",
+    "is_shape_rectangular",
+    "is_shape_rectangular_not_square",
 ]
 
 
@@ -450,6 +516,11 @@ conditionals_dict: dict[ConditionalType, Callable[[Shape], bool]] = {
     "is_shape_higher_than_wide": is_shape_higher_than_wide,
     "is_shape_wider_than_high": is_shape_wider_than_high,
     "is_shape_same_height_width": is_shape_same_height_width,
+    "is_shape_not_same_height_width": is_shape_not_same_height_width,
+    "is_shape_cross": is_shape_cross,
+    "is_shape_cross_or_rectangle": is_shape_cross_or_rectangle,
+    "is_shape_diamond": is_shape_diamond,
+    "is_shape_cross_or_rectangle_or_diamond": is_shape_cross_or_rectangle_or_diamond,
     "is_shape_of_two_cols": is_shape_of_two_cols,
     "is_shape_of_three_cols": is_shape_of_three_cols,
     "is_shape_of_four_cols": is_shape_of_four_cols,
@@ -486,4 +557,6 @@ conditionals_dict: dict[ConditionalType, Callable[[Shape], bool]] = {
     "is_shape_less_than_11_cols": is_shape_less_than_11_cols,
     "is_shape_less_than_9_rows": is_shape_less_than_9_rows,
     "is_shape_less_than_9_cols": is_shape_less_than_9_cols,
+    "is_shape_rectangular": is_shape_rectangular,
+    "is_shape_rectangular_not_square": is_shape_rectangular_not_square,
 }
