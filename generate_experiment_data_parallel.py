@@ -822,6 +822,7 @@ def _load_studies():
     from experiment_configs.generalization import generalization_configs
     from experiment_configs.sample_efficiency import sample_efficiency_configs
     from experiment_configs.compgen import compgen_experiments_s1, compgen_experiments_s2
+    from experiment_configs.additionnal_compgen import compgen_experiments_s5, compgen_experiments_s6
     from experiment_configs.compgen_basics import compgen_basics_experiments
 
     STUDIES["c0"] = c0_configs
@@ -832,6 +833,8 @@ def _load_studies():
     STUDIES["c4"] = c4_configs
     STUDIES["compgen_experiments_s1"] = compgen_experiments_s1
     STUDIES["compgen_experiments_s2"] = compgen_experiments_s2
+    STUDIES["compgen_experiments_s5"] = compgen_experiments_s5
+    STUDIES["compgen_experiments_s6"] = compgen_experiments_s6
     STUDIES["compgen_basics_experiments"] = compgen_basics_experiments
 
 
@@ -842,7 +845,10 @@ def _load_studies():
 def main():
     parser = argparse.ArgumentParser(description="Generate balanced experiment datasets in parallel.")
     parser.add_argument("--study", type=str, required=True,
-                        help="Study name (c0, compositionality, generalization, sample_efficiency, compositionality_gridsize, c4, compgen_experiments_s1, compgen_experiments_s2, compgen_basics_experiments) or 'all'.")
+                        help="Study name (c0, compositionality, generalization, sample_efficiency, compositionality_gridsize, \
+                            c4, compgen_experiments_s1, compgen_experiments_s2, compgen_experiments_s5, compgen_experiments_s6, \
+                            compgen_basics_experiments) or 'all'."
+                        )
     parser.add_argument("--study_name_suffix", type=str, default="",
                         help="Optional suffix to append to study name right after the study config was loaded. This allows to use only one config file for several generations.")
     parser.add_argument("--output-dir", type=str, default="./data",
